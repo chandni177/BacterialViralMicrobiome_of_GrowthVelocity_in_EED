@@ -1,0 +1,862 @@
+---
+title: "Environmental Enteropathy: Eukaryotic Analysis and Figures"
+author: "Rachel Rodgers"
+date: "July 27, 2019"
+output: html_document
+---
+
+```{r initiate-environment, include=FALSE}
+# Global knitr option
+knitr::opts_chunk$set(fig.width=8,
+                      fig.height=6,
+                      warning=FALSE,
+                      message=FALSE)
+
+# Load libraries
+library("phyloseq")
+library("RColorBrewer")
+library("vegan")
+library("gridExtra")
+library("knitr")
+library("plotly")
+library("ggpubr")
+library("data.table")
+library("microbiome")
+library("DESeq2")
+library("ggrepel")
+library("pheatmap")
+library("FSA")
+library("gmodels")
+library("tidyverse")
+
+source("./shared_R_scripts/Helper_Functions.R")
+
+theme_set(theme_bw(base_size = 12))
+```
+
+# Intro
+
+Analysis of eukaryotic virus data from VirusSeeker pipeline.
+
+Community composition, richness and diversity, ground truth plots and presence/absence heatmap will be done at the "Family" level.
+
+DESeq2 analysis and associated plots will be done at the "Genus" level.
+
+# Read in Data
+
+```{r read-in-data}
+# pre-processing data (will be using sampleDataFull)
+load("../data/RDataObjects/EE_Virome_Preprocessing.RData")
+
+# count data
+eukFamilyCounts <- read.delim("../data/VirusSeeker_Eukaryotic_Data/Lori_RdAB_Family.txt",
+                              strip.white = TRUE, blank.lines.skip = TRUE,
+                              stringsAsFactors = FALSE)
+eukGenusCounts <- read.delim("../data/VirusSeeker_Eukaryotic_Data/Lori_RdAB_Genus.txt",
+                             strip.white = TRUE, blank.lines.skip = TRUE,
+                             stringsAsFactors = FALSE)
+```
+
+# Generate Phyloseq Objects
+
+## Eukaryotic Sample Data Table
+
+In order to match the sample names in the family counts table, we need to change sampleDataFull rownames to the sample_name column. 
+
+```{r eukaryoticSampleData}
+eukaryoticSampleData <- sampleDataFull %>% 
+  rownames_to_column(var = "sample_long_name")
+
+# we need sample_name to be the rownames, however there are two NAs in sample_name column
+# fill those NAs in by modifying sample_long_name
+eukaryoticSampleData$sample_long_name <- as.character(eukaryoticSampleData$sample_long_name)
+eukaryoticSampleData$sample_name <- as.character(eukaryoticSampleData$sample_name)
+
+eukaryoticSampleData <- eukaryoticSampleData %>% 
+  mutate("sample_name" = ifelse(is.na(sample_name),
+                                yes = str_extract(string = sample_long_name,
+                                                  pattern = "Manary.*"),
+                                no = sample_name))
+
+rownames(eukaryoticSampleData) <- eukaryoticSampleData$sample_name
+```
+
+## Family-level OTU Table
+
+The sampleDataEukaryotic needs to be combined with the family count to generate a family-level phyloseq object.  We need to ensure that sample names are going to match by removing everything before "Manary" in the sample column of the count tables.
+
+First, there are duplicated samples in the count tables that need to be removed.  28_LNS_78 and 30_LNS_78 were sequenced twice.  We want to use the later samples from run M235. 
+
+We also need to remove the following false-positive eukaryotic viral families:
+  * nodaviridae
+  * maresilleviridae
+  * mimiviridae
+  * phycondaviridae
+  * poxviridae
+  
+picornavirales will be dropped as it's an Order and it's unclear to which viral families its reads should be distributed.
+
+The following viral groups will be renamed:
+  * southern.bean.mosaic.virus - solemoviridae
+  * husa.like.virus.ks.2016a - unclassified.picornavirales
+  * viruses - unclassified.viruses
+  * gemycirculavirus.group - genomoviridae
+  * pithovirus - pithoviridae
+
+```{r eukFamilyOTUTable}
+eukFamilyCountsModified <- eukFamilyCounts %>%
+  mutate("sample_name" = str_extract(string = sample, pattern = "Manary_.*")) 
+
+duplicatedSamples <- eukFamilyCountsModified$sample_name[duplicated(eukFamilyCountsModified$sample_name)]
+
+dim(eukFamilyCountsModified) # 159 samples, expect to drop 2 for 157 total
+
+eukFamilyCountsModified <- eukFamilyCountsModified %>% 
+  filter(!(`run.` != "MiSeq_235" & sample_name %in% duplicatedSamples))
+dim(eukFamilyCountsModified) # 157 samples x 54 taxa
+
+falsePositiveFamilies <- c("nodaviridae", "marseilleviridae",
+                           "mimiviridae", "phycodnaviridae",
+                           "poxviridae", "picornavirales") # should be left with 49 taxa
+
+eukFamilyCountsModified <- eukFamilyCountsModified %>% 
+  select(sample_name, c(10:63)) %>% 
+  column_to_rownames(var = "sample_name") %>% 
+  select(- falsePositiveFamilies)
+
+setnames(eukFamilyCountsModified,
+         old = c("southern.bean.mosaic.virus",
+                 "husa.like.virus.ks.2016a",
+                 "viruses",
+                 "gemycircularvirus.group",
+                 "pithovirus"),
+         new = c("solemoviridae",
+                 "unclassified.picornavirales",
+                 "unclassified.viruses",
+                 "genomoviridae",
+                 "pithoviridae"))
+
+dim(eukFamilyCountsModified) # 157 x 48
+
+# transpose so physeq likes it:
+eukFamilyOTUTable <- t(eukFamilyCountsModified)
+dim(eukFamilyOTUTable) # 49 taxa by 157 samples
+
+eukFamilyOTUTable <- otu_table(eukFamilyOTUTable, taxa_are_rows = TRUE)
+taxa_names(eukFamilyOTUTable)
+```
+
+With the two duplicate samples removed we should be able to generate a physeq object for family-level eukaryotic viruses.
+
+## Family-level Tax Table
+
+We also need to make a tax_table, which will be a single column data-frame.  I will write this data frame out and look up what kind of virus each taxa is for later subsetting in the presence/absence heatmap (RNA, DNA, or other eukaryotic virus).  Then I will add this designation back in before assigning to the phyloseq object.
+
+```{r eukTaxTable}
+eukTaxTable <- data.frame("Family" = rownames(eukFamilyOTUTable))
+
+# write out so we can add Category designation (RNA, DNA, or other virus)
+write.table(eukTaxTable, file = "../documents/eukTaxTable.txt",
+            quote = FALSE, sep = "\t")
+```
+
+Read back file with added categories.
+
+```{r eukTaxTableWithCategories}
+eukTaxTableWithCategories <- read.delim(file = "../documents/eukTaxTableWithCategories.txt",
+                                        strip.white = TRUE, stringsAsFactors = FALSE)
+
+rownames(eukTaxTableWithCategories) <- eukTaxTable$Family # want original style of family names
+```
+
+```{r eukTaxTableMtx}
+eukTaxTableMtx <- as.matrix(eukTaxTableWithCategories)
+eukTaxTableMtx <- tax_table(eukTaxTableMtx)
+taxa_names(eukTaxTableMtx)
+```
+
+## Family-level Phyloseq Object
+
+```{r physeqEukFamily}
+# merge the otu table with sample data and tax table
+physeqEukFamily <- merge_phyloseq(sample_data(eukaryoticSampleData),
+                                  eukFamilyOTUTable,
+                                  eukTaxTableMtx)
+physeqEukFamily # 48 taxa x 131 samples
+
+# Remove taxa with fewer than 3 total reads in the data set
+physeqEukFamily <- prune_taxa(taxa_sums(physeqEukFamily) > 3,
+                              physeqEukFamily)
+physeqEukFamily # 35 taxa x 131 samples
+
+# keep only samples with Adequate, Moderate, Poor Growth Status Prior, and with
+#   EE based on percent L
+physeqEukFamilyAllEE <- physeqEukFamily %>%
+  subset_samples(Growth_Status_Prior %in% c("Adequate", "Moderate", "Poor") &
+                   (EE_status_based_on_percL != "No"))
+physeqEukFamilyAllEE # 35 x 94 samples
+
+# any empty samples?
+any(sample_sums(physeqEukFamilyAllEE) == 0) # TRUE
+removeEmptySamples <- sample_names(physeqEukFamilyAllEE)[sample_sums(physeqEukFamilyAllEE) == 0]
+physeqEukFamilyAllEE <- prune_samples(!(sample_names(physeqEukFamilyAllEE) %in% removeEmptySamples),
+                                      physeqEukFamilyAllEE)
+physeqEukFamilyAllEE # 35 taxa x 91 samples
+
+# any empty taxa?
+any(taxa_sums(physeqEukFamilyAllEE) == 0) # TRUE
+taxa_names(physeqEukFamilyAllEE)[taxa_sums(physeqEukFamilyAllEE) == 0]
+
+physeqEukFamilyAllEE <- RemoveMissingTaxa(physeqEukFamilyAllEE)
+physeqEukFamilyAllEE # 33 taxa x 91 samples
+```
+
+```{r save-physeqEukFamily}
+saveRDS(physeqEukFamily, "../data/physeqObjects/physeqEukFamily.RDS")
+```
+
+
+# Community Composition Plot Eukaryotic Virus at Family Level
+
+```{r eukaryotic-community-abundance, fig.width=11, fig.height=8.5}
+eukFamilyAbdDF <- MakeAbundanceDF(physeqEukFamilyAllEE, taxRank = "Family",
+                                  abundanceFilter = 0.01)
+
+eukFamilyCommunityPlot <- ggplot(eukFamilyAbdDF,
+                                 aes(x = Sample, y = Abundance,
+                                     fill = Family)) +
+  geom_bar(stat = "identity", width = 1, position = "fill") +
+  labs(y = "Relative Abundance") +
+  facet_wrap(~ Growth_Status_Prior, scales = "free_x") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position = "bottom")
+eukFamilyCommunityPlot
+```
+
+# Eukaryotic Richness and Diversity at Family Level
+
+```{r eukFamilyAlphaDiv}
+CalculateAlphaDiversity <- function(physeqObj) {
+  alphaDivDF <- estimate_richness(physeqObj,
+                                  measures = c("Observed", "Shannon"))
+  # Change periods in alphaDivDF back to hyphens so we can merge w/sample data
+  row.names(alphaDivDF) <- c(gsub("\\.", "-", rownames(alphaDivDF)))
+  
+  sampleDataDF <- as(sample_data(physeqObj), "data.frame")
+  
+  alphaDivDF <- merge(alphaDivDF, sampleDataDF, by = "row.names")
+  return(alphaDivDF)
+}
+
+eukFamilyAlphaDiv <- CalculateAlphaDiversity(physeqEukFamilyAllEE)
+
+eukRichnessFamily <- ggplot(eukFamilyAlphaDiv,
+                            aes(x = Growth_Status_Prior, y = Observed)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+  ylab("Richness") +
+  stat_compare_means(label = "p.format", method = "kruskal.test", 
+                     hide.ns = TRUE, label.x.npc = 0.5) +
+  theme(axis.title.x = element_blank())
+eukRichnessFamily
+
+eukDiversityFamily <- ggplot(eukFamilyAlphaDiv,
+                             aes(x = Growth_Status_Prior, y = Shannon)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+  ylab("Shannon Diversity") +
+  stat_compare_means(label = "p.format", method = "kruskal.test", 
+                     hide.ns = TRUE, label.x.npc = 0.5) +
+  theme(axis.title.x = element_blank())
+eukDiversityFamily
+```
+
+# Eukaryotic Presence/Absence Heatmap at Family Level
+
+```{r eukFamilyPAMtx}
+eukFamilyMtx <- as(otu_table(physeqEukFamilyAllEE), "matrix")
+eukFamilyMtxPA <- decostand(eukFamilyMtx, method = "pa")
+```
+
+We want to cluster viral groups by their Category name, but annotate with their Family name.  Within each Category we want to arrange each Family by decreasing abundance.
+
+```{r euk-heatmap-arrange-rows}
+# add an abundance column to the presence-absence matrix
+eukRowSums <- rowSums(eukFamilyMtxPA)
+
+eukDFPA <- eukFamilyMtxPA %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "taxon") %>% 
+  mutate("abundance" = eukRowSums[taxon]) %>% 
+  select(taxon, abundance, everything())
+
+# add additional classificationi information
+taxonInformation <- eukTaxTableWithCategories %>% 
+  rownames_to_column(var = "taxon")
+
+eukDFPA <- merge(taxonInformation, eukDFPA, by = "taxon")
+
+# arrange the rows by Category and then decreasing abundance
+eukDFPA <- eukDFPA %>% 
+  arrange(Category, desc(abundance))
+
+# move unclassified eukaryotic viruses and environmental samples to the bottom of heatmap
+eukDFPAFirstSubset <- subset(eukDFPA,
+                             eukDFPA$Category != "other eukaryotic viruses")
+eukDFPASecondSubset <- subset(eukDFPA,
+                              eukDFPA$Category == "other eukaryotic viruses")
+
+eukDFPA <- rbind(eukDFPAFirstSubset, eukDFPASecondSubset)
+eukDFPA <- eukDFPA %>% 
+  select(-c(Category, taxon, abundance))
+
+row.names(eukDFPA) <- NULL
+eukDFPA <- column_to_rownames(eukDFPA, var = "Family")
+```
+
+```{r column-annotation-by-Growth_Stats_Prior}
+# columns will be samples and we want to annotate them by growth status prior
+eukFamilyHeatmap_colAnnotation <- as(sample_data(physeqEukFamilyAllEE), "data.frame") %>% 
+  rownames_to_column(var = "full_sample_name") %>% 
+  select(full_sample_name, Growth_Status_Prior) %>% 
+  arrange(Growth_Status_Prior) %>% 
+  column_to_rownames(var = "full_sample_name")
+
+# organize eukFamilyMtxPA columns by growth status
+eukFamilyHeatmap_sampleLevels <- row.names(eukFamilyHeatmap_colAnnotation)
+
+eukDFPA <- eukDFPA %>% 
+  select(eukFamilyHeatmap_sampleLevels)
+
+# rows will be viral families, we want to annotate them by Category
+eukFamilyHeatmap_rowAnnotation <- eukTaxTableWithCategories 
+rownames(eukFamilyHeatmap_rowAnnotation) <- NULL
+eukFamilyHeatmap_rowAnnotation <- eukFamilyHeatmap_rowAnnotation %>% 
+  column_to_rownames(var = "Family")
+
+# change eukDFPA back to matrix
+eukFamilyMtxPA <- as.matrix(eukDFPA)
+```
+
+```{r eukaryoticFamilyHeatmap, fig.width=7.5, fig.height=5}
+eukaryoticFamilyHeatmap <- pheatmap(mat = eukFamilyMtxPA, 
+         show_colnames = FALSE, show_rownames = TRUE,
+         annotation_col = eukFamilyHeatmap_colAnnotation,
+         annotation_row = eukFamilyHeatmap_rowAnnotation,
+         cluster_rows = FALSE, cluster_cols = FALSE,
+         color = c("white", "grey90", "grey40"),
+         annotation_legend = TRUE,
+         fontsize = 8, border_color = NA,
+         legend = FALSE)
+         #color = brewer.pal(n = 3, name = "Greys"))#,
+         #cellwidth = 6.5, cellheight = 10,
+         #border_color = "black")
+```
+
+```{r save-heatmap-for-edits, eval=FALSE}
+tiff("../figures/EukaryoticVirusHeatmap.tiff",
+     units = "in", width = 7.5, height = 4, res = 300)
+eukaryoticFamilyHeatmap
+dev.off()
+```
+
+Picornaviridae is the most commonly found RNA virus, present in 84 samples.  But instead of making a ground truth plot of Picorna we will end up making a ground truth plot of the most abundant genus within Picorna.  The next most common RNA virus is Virgiviridae, preset in 62 samples.  The most commonly found DNA virus is Adenoviridae, present in 61 samples.
+
+We also want to know how many eukaryotic viral families are found in each growth category?
+
+```{r euk-viral-families-per-group}
+sampleNames <- colnames(eukDFPA)
+
+gatherFamPerSample <- eukDFPA %>% 
+  rownames_to_column(var = "euk_family") %>% 
+  gather(key = "sample", value = "pa", sampleNames)
+
+# add grouping var
+gatherFamPerSample <- gatherFamPerSample %>% 
+  mutate("Growth_Status" = eukFamilyHeatmap_colAnnotation[sample, "Growth_Status_Prior"]) %>% 
+  filter(pa != 0)
+
+gatherFamPerSample %>% group_by(Growth_Status) %>% 
+  summarise("total_families" = n_distinct(euk_family))
+```
+
+# DESeq on Eukaryotic Families by Growth Category
+
+```{r euk-prevalence-filter}
+# We want to prevalence filter taxa present in only 1 sample.
+#----- prevalence filtering (taxa  present in > 1 sample) -----#
+eukPrevVec <- apply(X = otu_table(physeqEukFamilyAllEE),
+                    MARGIN = ifelse(taxa_are_rows(physeqEukFamilyAllEE),
+                                    yes = 1, no =2),
+                    FUN = function(x) {sum(x > 0)})
+
+eukAbdVec <- taxa_sums(physeqEukFamilyAllEE)
+
+eukTaxTable <- as(tax_table(physeqEukFamilyAllEE), "matrix")
+
+eukPrevDF <- data.frame(Prevalence = eukPrevVec,
+                        TotalAbundance = eukAbdVec,
+                        eukTaxTable)
+
+keepEukDESeq <- eukPrevDF %>% 
+  rownames_to_column(var = "taxon") %>% 
+  filter(Prevalence > 1) %>% 
+  pull(taxon) # 32 keepers
+
+physeqEukFilt <- prune_taxa(keepEukDESeq, physeqEukFamilyAllEE)
+physeqEukFilt # 32 x 91
+
+any(sample_sums(physeqEukFilt) == 0) # FALSE
+
+#----- Remove Moderate Samples -----#
+physeqEukNoModerate <- physeqEukFilt %>% 
+  subset_samples(Growth_Status_Prior != "Moderate") %>% 
+  RemoveMissingTaxa()
+physeqEukNoModerate # 32 x 54
+
+#----- DESeq2 Analysis -----#
+ddsEuk <- phyloseq_to_deseq2(physeqEukNoModerate,
+                             design = ~ bf_at_sampling + Growth_Status_Prior)
+eukCounts <- counts(ddsEuk)
+geoMeans <- apply(eukCounts,
+                  1,
+                  function(row) {if (all(row == 0)) 0 else exp(mean(log(row[row != 0])))})
+ddsEuk <- estimateSizeFactors(ddsEuk, geoMeans = geoMeans)
+
+set.seed(47544091)
+ddsEukAnalysis <- DESeq(ddsEuk, test = "Wald", fitType = "local", betaPrior = FALSE)
+ddsEukResults <- results(ddsEukAnalysis,
+                         contrast = c(variable = "Growth_Status_Prior",
+                                      numerator = "Poor",
+                                      denominator = "Adequate"))
+deseqEukResultsTable <- GenerateDESeqResultsTable(physeq = physeqEukNoModerate,
+                                                  ddsResults = ddsEukResults)
+
+eukVolcano <- ggplot(deseqEukResultsTable,
+                  aes(x = log2FoldChange,
+                      y = -log10(padj))) +
+    geom_point(data = subset(deseqEukResultsTable,
+                             deseqEukResultsTable$Significant == FALSE),
+               color = "grey") +
+    geom_point(data = subset(deseqEukResultsTable,
+                             deseqEukResultsTable$Significant == TRUE),
+               aes(color = Family, size = baseMean)) +
+    geom_vline(xintercept = 0, lty = 2) +
+    geom_hline(yintercept = -log10(0.05)) +
+    ggtitle("Phage DESeq2 Results Poor vs Adequate Growth Status") +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5),
+          axis.title = element_text(size = 12),
+          axis.text = element_text(size = 12),
+          legend.text = element_text(size = 12))
+eukVolcano
+```
+
+# Eukaryotic Ground Truth Plots at Family Level
+
+Generate normalized abundance table.
+
+```{r psEukNormalizedMelt}
+# Convert physeqEukFamilyAllEE to deseq object
+deseqEukFamily <- phyloseq_to_deseq2(physeqEukFamilyAllEE, ~ Growth_Status_Prior)
+
+# Estimate size factors for the deseq object
+gm_mean <- function(x) {
+  exp(sum(log(x[x > 0]), na.rm = TRUE) / length(x))
+}
+
+geoMeansEukFamily <- apply(counts(deseqEukFamily), 1, gm_mean)
+deseqEukFamilyFinal <- estimateSizeFactors(deseqEukFamily,
+                                           geoMeans = geoMeansEukFamily)
+
+# Run DESeq on the deseq object
+set.seed(8157400)
+deseqEukFamilyFinal <- DESeq(deseqEukFamilyFinal, 
+                             fitType = "local", test = "Wald")
+
+# replace the counts of physeqEukFamilyAllEE with the counts from deseq object
+replace_counts = function(physeq, dds) {
+
+  dds_counts = counts(dds, normalized = TRUE)
+  if (!identical(taxa_names(physeq), rownames(dds_counts))) {
+    stop("OTU ids don't match")
+  }
+  otu_table(physeq) = otu_table(dds_counts, taxa_are_rows = TRUE)
+  return(physeq)
+}
+
+physeqEukFamilyNormalized <- replace_counts(physeq = physeqEukFamilyAllEE,
+                                            dds = deseqEukFamilyFinal)
+psEukNormalizedMelt <- psmelt(physeqEukFamilyNormalized)
+```
+
+From the normalized physeq counts, we can make ground truth plots for Virgaviridae and Adenoviridae.
+
+```{r euk-family-ground-truth-plots}
+GetNormalizedAbundanceDF <- function(taxaName) {
+  normalizedAbdDF <- subset(psEukNormalizedMelt,
+                            psEukNormalizedMelt$Family == taxaName)
+}
+
+PlotGroundTruth <- function(abundanceDF, plotTitle) {
+  ggplot(abundanceDF, aes_string(x = "Growth_Status_Prior", y = "Abundance")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    scale_y_log10() +
+    ylab("Normalized Abd. (log10)") +
+    ggtitle(plotTitle) +
+    stat_compare_means(method = "kruskal.test", label = "p.format",
+                       size = 3.5) +
+    theme_pubr() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 10),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10))
+}
+
+groundTruthFam <- list("Adenoviridae" = "Adenoviridae",
+                       "Virgaviridae" = "Virgaviridae",
+                       "Anelloviridae" = "Anelloviridae",
+                       "Circoviridae" = "Circoviridae",
+                       "Parvoviridae" = "Parvoviridae",
+                       "Picornaviridae" = "Picornaviridae")
+
+eukFamilyNormalizedAbdDFList <- pmap(.l = list(taxaName = groundTruthFam),
+                                     .f = GetNormalizedAbundanceDF)
+
+eukFamilyGroundTruthPlotList <- pmap(.l = list(abundanceDF = eukFamilyNormalizedAbdDFList,
+                                               plotTitle = names(eukFamilyNormalizedAbdDFList)),
+                                     .f = PlotGroundTruth)
+
+eukFamilyGroundTruthPlotList
+```
+
+## Fisher's Exact Test on Adenoviridae and Virgaviridae
+
+Pulling counts from eukFamilyNormalizedAbdDFList
+
+```{r fishers-exact-euk-families}
+#----- Adenoviridae -----#
+adenoNormalizedAbd <- eukFamilyNormalizedAbdDFList$Adenoviridae %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor"))
+
+results <- adenoNormalizedAbd %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, yes = "1", no = "0")) %>% 
+  select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+# p = 1
+
+#----- Virgaviridae -----#
+virgaNormalizedAbd <- eukFamilyNormalizedAbdDFList$Virgaviridae %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor"))
+
+virgaNormalizedAbd %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, yes = "1", no = "0")) %>% 
+  select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+# p = 1
+
+#----- Parvoviridae -----#
+parvoNormalizedAbd <- eukFamilyNormalizedAbdDFList$Parvoviridae %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor"))
+
+parvoNormalizedAbd %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, yes = "1", no = "0")) %>% 
+  select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+# p = 0.37
+
+#----- Picornaviridae -----#
+picornaNormalizedAbd <- eukFamilyNormalizedAbdDFList$Picornaviridae%>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor"))
+
+picornaNormalizedAbd %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, yes = "1", no = "0")) %>% 
+  select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+# p = 1
+
+#----- Circoviridae -----#
+circoNormalizedAbd <- eukFamilyNormalizedAbdDFList$Circoviridae %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor"))
+
+circoNormalizedAbd %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, yes = "1", no = "0")) %>% 
+  select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+# p = 0.3
+```
+
+# Ground Truth Plot for Most Common Picornaviridae Genus
+
+## Find Most Common Picorna Genus
+
+First we need to generate a count table at the genus level.  Then select just those genera that belong to the Picornaviridae family.  Then we chan check which genus is present in the highest number of samples.
+
+```{r eukGenusCountsModified}
+eukGenusCountsModified <- eukGenusCounts %>%
+  mutate("sample_name" = str_extract(string = sample, pattern = "Manary_.*")) 
+
+duplicatedSamples <- eukGenusCountsModified$sample_name[duplicated(eukGenusCountsModified$sample_name)]
+
+dim(eukGenusCountsModified) # 159 samples, expect to drop 2 for 157 total
+
+eukGenusCountsModified <- eukGenusCountsModified %>% 
+  filter(!(`run.` != "MiSeq_235" & sample_name %in% duplicatedSamples))
+dim(eukGenusCountsModified) # 157 samples x 115 taxa
+
+eukGenusCountsModified <- eukGenusCountsModified %>% 
+  select(sample_name, c(10:114)) %>% 
+  column_to_rownames(var = "sample_name")
+
+allGenera <- colnames(eukGenusCountsModified)
+
+# selected picorna genera from our data set by checking here:
+# https://talk.ictvonline.org/ictv-reports/ictv_online_report/positive-sense-rna-viruses/picornavirales/w/picornaviridae
+picornas <- c("cosavirus", "enterovirus", "hepatovirus",
+              "kobuvirus", "parechovirus", "salivirus")
+
+# remove samples that are not part of the stunting study
+keepSamples <- eukaryoticSampleData %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Moderate", "Poor") &
+           EE_status_based_on_percL != "No") %>% 
+  pull(sample_name)
+
+picornaCounts <- eukGenusCountsModified %>% 
+  rownames_to_column(var = "sample") %>% 
+  select(sample, picornas) %>% 
+  filter(sample %in% keepSamples) %>% 
+  column_to_rownames(var = "sample")
+
+picornaPACounts <- decostand(picornaCounts, method = "pa")
+
+picornaTally <- colSums(picornaPACounts)
+```
+
+Enterovirus is the most commonly found Picornaviridae, found in 78 samples.
+
+## Generate Genus-level Physeq Object
+
+Before we can generate a normalized abundance table, we must combine the genus-level count table with the sample data.
+
+### Genus-level OTU Table
+
+```{r eukGenusOTUTable}
+# transpose eukGenusCountsModified so physeq likes it:
+eukGenusOTUTable <- t(eukGenusCountsModified)
+dim(eukGenusOTUTable) # 105 taxa by 157 samples
+
+eukGenusOTUTable <- otu_table(eukGenusOTUTable, taxa_are_rows = TRUE)
+taxa_names(eukFamilyOTUTable)
+```
+
+### Genus-level Tax Table
+
+```{r eukGenusTaxTable}
+eukGenusTaxTable <- data.frame("Genus" = rownames(eukGenusOTUTable))
+rownames(eukGenusTaxTable) <- eukGenusTaxTable$Genus
+eukGenusTaxTable <- tax_table(as.matrix(eukGenusTaxTable))
+taxa_names(eukGenusTaxTable)
+```
+
+### Genus-level Phyloseq Object
+
+```{r physeqEukGenus}
+physeqEukGenus <- merge_phyloseq(sample_data(eukaryoticSampleData),
+                                 eukGenusOTUTable, 
+                                 eukGenusTaxTable)
+physeqEukGenus # 105 taxa x 131 samples
+
+# keep only samples with Adequate, Moderate, Poor Growth Status Prior, and with
+#   EE based on percent L
+physeqEukGenusAllEE <- physeqEukGenus %>%
+  subset_samples(Growth_Status_Prior %in% c("Adequate", "Moderate", "Poor") &
+                   (EE_status_based_on_percL != "No")) %>% 
+  RemoveMissingTaxa()
+
+# any empty samples?
+physeqEukGenusAllEE # 91 taxa x 94 samples
+any(sample_sums(physeqEukGenusAllEE) == 0) # TRUE
+
+emptyGenusSamples <- sample_names(physeqEukGenusAllEE)[sample_sums(physeqEukGenusAllEE) == 0] # will drop to 92 samples
+
+physeqEukGenusAllEE <- prune_samples(!(sample_names(physeqEukGenusAllEE) %in% emptyGenusSamples),
+                                     physeqEukGenusAllEE)
+physeqEukGenusAllEE # 91 taxa x 94 samples
+```
+
+## Generate Genus-Level Normalized Abundance Table
+
+```{r genus-level-normalized-abundance}
+deseqEukGenus <- phyloseq_to_deseq2(physeqEukGenusAllEE, ~ Growth_Status_Prior)
+
+# Estimate size factors for the deseq object
+geoMeansEukGenus <- apply(counts(deseqEukGenus), 1, gm_mean)
+deseqEukGenusFinal <- estimateSizeFactors(deseqEukGenus,
+                                          geoMeans = geoMeansEukGenus)
+# Run DESeq on the deseq object
+set.seed(8157400)
+deseqEukGenusFinal <- DESeq(deseqEukGenusFinal,
+                            fitType = "local", test = "Wald")
+
+# replace the counts of physeqEukGenusAllEE with the counts from deseq object
+physeqEukGenusNormalized <- replace_counts(physeq = physeqEukGenusAllEE,
+                                           dds = deseqEukGenusFinal)
+psEukNormalizedMeltGenus <- psmelt(physeqEukGenusNormalized)
+```
+
+From the normalized physeq counts, we can make ground truth plots for Enterovirus.
+
+```{r euk-family-ground-truth-plots}
+enterovirusNormalizedAbd <- subset(psEukNormalizedMeltGenus,
+                                   psEukNormalizedMeltGenus$Genus == "enterovirus")
+
+
+enterovirusGroundTruth <- PlotGroundTruth(enterovirusNormalizedAbd,
+                                          "Enterovirus")
+enterovirusGroundTruth
+```
+
+## Fisher's Exact Test on Enterovirus
+
+Pulling counts from enterovirusNormalizedAbd
+
+```{r fishers-exact-enterovirus}
+enteroNormalizedAbdFishers <- enterovirusNormalizedAbd %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor"))
+
+enteroNormalizedAbdFishers %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, yes = "1", no = "0")) %>% 
+  select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+# p = 0.25
+```
+
+# Arrange Eukaryotic Panel
+
+Format ground truth plots and arrange for eukaryotic panel figure.
+
+```{r adeno-ground-truth}
+#----- Adenoviridae Ground Truth -----#
+adenoGroundTruth <-  ggplot(eukFamilyNormalizedAbdDFList$Adenoviridae, 
+                            aes_string(x = "Growth_Status_Prior", y = "Abundance")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    scale_y_log10() +
+    ylab("Normalized Abd. (log10)") +
+    ggtitle("Adenoviridae") +
+    stat_compare_means(method = "kruskal.test", 
+                       label = "p.format",
+                       size = 3.5,
+                       label.x.npc = 0.5) +
+    theme_pubr() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 10),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10))
+set.seed(79736632)
+adenoGroundTruth
+```
+
+```{r virga-ground-truth}
+#----- Virgaviridae Ground Truth -----#
+virgaGroundTruth <-  ggplot(eukFamilyNormalizedAbdDFList$Virgaviridae, 
+                            aes_string(x = "Growth_Status_Prior", y = "Abundance")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    scale_y_log10() +
+    ylab("Normalized Abd. (log10)") +
+    ggtitle("Virgaviridae") +
+    stat_compare_means(method = "kruskal.test", 
+                       label = "p.format",
+                       size = 3.5,
+                       label.x.npc = 0.5,
+                       label.y.npc = 0.85) +
+    theme_pubr() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 10),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10))
+set.seed(79736632)
+virgaGroundTruth
+```
+
+```{r entero-ground-truth}
+#----- Enterovirus Ground Truth -----#
+enteroGroundTruth <-  ggplot(enterovirusNormalizedAbd, 
+                            aes_string(x = "Growth_Status_Prior", y = "Abundance")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    scale_y_log10() +
+    ylab("Normalized Abd. (log10)") +
+    ggtitle("Enterovirus") +
+    stat_compare_means(method = "kruskal.test", 
+                       label = "p.format",
+                       size = 3.5,
+                       label.x.npc = 0.5) +
+    theme_pubr() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 10),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10))
+set.seed(79736632)
+enteroGroundTruth
+```
+
+```{r eukaryotic-panel, fig.width=7.5, fig.height=7}
+eukaryoticPanel <- ggarrange(eukaryoticFamilyHeatmap$gtable,
+                             ggarrange(adenoGroundTruth,
+                                       virgaGroundTruth,
+                                       enteroGroundTruth,
+                                  labels = c("B", "C", "D"), ncol = 3,
+                                  widths = c(1, 1, 1)),
+                        nrow = 2, 
+                        labels = c("A"), 
+                        heights = c(2,1))
+eukaryoticPanel
+```
+
+```{r save-euk-panel}
+tiff("../figures/Figure4.tiff",
+     units = "in", width = 7.5, height = 5, res = 300)
+eukaryoticPanel
+dev.off()
+```
+
+### Session Info
+
+```{r session-info}
+writeLines(capture.output(sessionInfo()), 
+           "EE_Virome_Eukaryotic_Analysis_and_Figures_session_info.txt")
+Sys.Date()
+getwd()
+sessionInfo()
+```

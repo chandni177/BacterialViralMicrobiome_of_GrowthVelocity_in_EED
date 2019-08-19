@@ -1,0 +1,472 @@
+---
+title: "Environmental Enteropathy: Bacterial Figures"
+author: "Chandni Desai & Rachel Rodgers"
+date: "July 30, 2019"
+output: html_document
+---
+
+# Introduction
+
+Code for generation of basic bacterial figures.
+
+```{r load-data, message=FALSE}
+load("../data/RDataObjects/Jul30_BacteriaData.RData")
+
+# Load libraries
+library("phyloseq")
+library("RColorBrewer")
+library("vegan")
+library("gridExtra")
+library("knitr")
+library("plotly")
+library("ggpubr")
+library("data.table")
+library("microbiome")
+library("DESeq2")
+library("ggrepel")
+library("pheatmap")
+library("FSA")
+library("gmodels")
+library("tidyverse")
+
+theme_set(theme_bw(base_size = 14))
+```
+
+# FIGURE 1 : COHORT
+
+## Part 1 : Sampling timeline
+
+```{r figure1p1-sampling-timeline}
+plot1_1 <- ggplot(sd, 
+                  aes(x = age_months,
+                      y = reorder(factor(patient_ID), age_months))) + 
+  geom_point(size = 1.5) + 
+  geom_line(aes(group = patient_ID)) +
+  labs(y = "Patient ID", x = "Age in months") +
+  theme(axis.title = element_text(size = 10),
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 9))
+set.seed(2137091)
+plot1_1
+```
+
+## Part 2 : perc L
+
+```{r figure1p2-percent-L}
+plot1_2 <- ggplot(sd, 
+                  aes(x = "", y = perc_L)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+  geom_hline(yintercept = 0.2, alpha = 0.5, linetype = 2) +
+  geom_hline(yintercept = 0.45 ,alpha = 0.5, linetype = 2) +
+  labs(y = "%L", x = "") +
+  theme(axis.title = element_text(size = 10),
+        axis.text = element_text(size = 10))
+set.seed(2137091)
+plot1_2
+```
+
+## Part 3 : delta HAZ
+
+```{r figure1p3-delta-HAZ}
+## Use data from file: plottingdeltaHAZ_dataforfigure.txt
+deltaHAZ <- read.table(file = "../documents/plottingdeltaHAZ_dataforfigure.txt", 
+                       header = TRUE)
+
+plot1_3 <- ggplot(deltaHAZ, 
+                  aes(x = "", y = deltaHAZ)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+  geom_hline(yintercept = -0.3, alpha = 0.5, linetype = 2) +
+  geom_hline(yintercept = 0,alpha = 0.5, linetype = 2) +
+  labs(y = expression(Delta ~ HAZ), x = "") +
+  theme(axis.title = element_text(size = 10),
+        axis.text = element_text(size = 10))
+set.seed(2137091)
+plot1_3
+```
+
+## Part 4 : Bacterial richness with age
+
+```{r figure1p4-bacterial-richness-with-age}
+## Use phyloseq object : ps2 (All Samples. don't remove healthy samples yet)
+
+diversity.ps2 <- estimate_richness(ps2, 
+                                   measures = c("Observed", "Shannon"))
+row.names(diversity.ps2) <- c(sub(pattern = '\\X', 
+                                  replacement = "", 
+                                  x = rownames(diversity.ps2)))
+#head(diversity.ps2)
+
+sampledata.ps2 <- as.data.frame(sample_data(ps2))
+ps2.rich <- merge(sampledata.ps2, diversity.ps2, by ="row.names")
+
+## Calculate regression coefficient
+regression <- lm(Observed ~ age_months, data = ps2.rich)
+summary(regression)
+#Call:
+#lm(formula = Observed ~ age_months, data = ps2.rich)
+
+#Residuals:
+#     Min       1Q   Median       3Q      Max 
+#-100.773  -30.705   -3.764   30.456  158.870 
+
+#Coefficients:
+#            Estimate Std. Error t value Pr(>|t|)    
+#(Intercept)  30.8903    16.0034    1.93   0.0556 .  
+#age_months    4.6953     0.5712    8.22 1.12e-13 ***
+#---
+#Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+#Residual standard error: 45.41 on 143 degrees of freedom
+#Multiple R-squared:  0.3209,	Adjusted R-squared:  0.3161 
+#F-statistic: 67.57 on 1 and 143 DF,  p-value: 1.116e-13
+
+
+plot1_4 <- ggplot(ps2.rich, 
+                  aes(x = age_months, y = Observed)) + 
+  geom_point(size = 1.5) + 
+  stat_smooth(method = lm) +
+  labs(y="Bacterial Richness", x = "Age in months") +
+  annotate("text", x = 20, y = 325, 
+           label = "paste(italic(R) ^ 2, \" = 0.316\")", parse = TRUE) +
+  theme(axis.title = element_text(size = 10),
+        axis.text = element_text(size = 10))
+set.seed(2137091)
+plot1_4
+```
+
+## Part 5 : Viral richness with age
+
+```{r figure1p5-viral-richness-regression}
+# import data from virus-side
+fullViralSampleData <- readRDS("../data/RDataObjects/fullViralSampleData.RDS")
+viralRichRegression <- lm(Observed ~ age_months, data = fullViralSampleData)
+summary(viralRichRegression)
+```
+
+```{r figure1p5-viral-richness-with-age}
+plot1_5 <- ggplot(fullViralSampleData, 
+                  aes(x = age_months, y = Observed)) + 
+  geom_point(size = 1.5) + 
+  stat_smooth(method = lm) +
+  labs(y="Viral Richness", x="Age in months") +
+  annotate("text", x = 20, y = 600, label = "paste(italic(R) ^ 2, \" = 0.021\")", 
+           parse = TRUE) +
+  theme(axis.title = element_text(size = 10),
+        axis.text = element_text(size = 10))
+set.seed(2137091)
+plot1_5
+```
+
+## ARRANGE Panel Figure 1
+
+```{r figure1-panel-arrange, fig.width=7.5, fig.height=6}
+figure1 <- ggarrange(plot1_1, 
+                     ggarrange(plot1_2, plot1_3, plot1_4, plot1_5,
+                               labels = c("B", "C", "D", "E"),
+                               heights = c(1, 1)), 
+                     ncol=2, 
+                     labels = "A", 
+                     widths = c(1,2))
+figure1
+```
+
+```{r figure-1-tiff}
+tiff("../figures/Figure1.tiff",
+     units = "in", width = 7.5, height = 6, res = 300)
+figure1
+dev.off()
+```
+
+# FIGURE 2 : BACTERIA : Community Composition & Alpha and Beta Diversity
+
+## Part 1 : Bacterial Community Composition
+
+```{r figure2p1-bacterial-community-composition}
+plot2_1 <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.phylum, 
+                  aes(x = sample_name, 
+                      y = Abundance, 
+                      fill = Phylum)) + 
+  geom_bar(stat = "identity", width = 1, position = "fill") +
+  labs(y="Relative Abundance", x="") +
+  facet_wrap(~Growth_Status_Prior, scales = "free_x") +
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size = 12),
+        strip.text = element_text(size = 10),
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.box.margin = margin(-10, -10, -10, -10),
+        legend.key.size = unit(0.5, "cm")) + 
+  scale_fill_brewer(palette="Set1")
+plot2_1
+```
+
+## Part 2 : Alpha Diversity : Richness
+
+```{r figure2p2-bacterial-richness}
+plot2_2 <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
+                  aes(x = Growth_Status_Prior, 
+                      y = Observed)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+  ylab("Richness") +
+  stat_compare_means(label = "p.format", method = "kruskal.test", 
+                     hide.ns = TRUE, 
+                     label.x.npc = 0,
+                     label.y.npc = 0.9,
+                     size = 3.5) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.y = element_text(size = 10))
+set.seed(2908795)
+plot2_2
+```
+
+## Part 3 : Alpha Diversity : Shannon Diversity
+
+```{r figure2p3-bacterial-shannon-diversity}
+plot2_3 <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
+                  aes(x = Growth_Status_Prior, 
+                      y = Shannon)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+  ylab("Shannon Diversity") +
+  stat_compare_means(label = "p.format", method = "kruskal.test", 
+                     hide.ns = TRUE, 
+                     label.x.npc = 0.0,
+                     label.y.npc = 0.9,
+                     size = 3.5) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.y = element_text(size = 10))
+set.seed(2908795)
+plot2_3
+```
+
+## Part 4 : Beta Diversity : weighted Unifrac
+
+```{r figure2p4-bacterial-pcoa-wUniFrac}
+# Extract eigenvalues from ordination object for easier customization of ggplot
+eigenValues <- ord.ps2.goodmoderatepoor.wuni.prior$values$Relative_eig
+
+plot2_4DF <- plot_ordination(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria,
+                             ord.ps2.goodmoderatepoor.wuni.prior,
+                             justDF = TRUE)
+
+plot2_4 <- ggplot(plot2_4DF,
+                  aes_string(x = "Axis.1", y = "Axis.2",
+                             color = "Growth_Status_Prior")) +
+  xlab(paste0("PCoA 1 (", round(100*eigenValues[1], digits = 1), "%)")) +
+  ylab(paste0("PCoA 2 (", round(100*eigenValues[2], digits = 1), "%)")) +
+  geom_point(size=2, alpha = 0.7) +
+  annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
+  scale_color_manual(values = c("red", "blue", "green")) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.box.margin = margin(-10, -10, -10, -10),
+        axis.title = element_text(size = 10))
+plot2_4
+```
+
+## ARRANGE Panel Figure 2
+
+```{r figure2-panel-arrange, fig.width=7.5, fig.height=7}
+figure2 <- ggarrange(plot2_1, 
+                     ggarrange(plot2_2, 
+                               plot2_3, 
+                               plot2_4, 
+                               labels = c("B", "C", "D"), 
+                               ncol=3, 
+                               widths=c(0.2, 0.2, 0.3)), 
+                     nrow = 2, 
+                     labels = c("A"),
+                     heights = c(1.1, 0.6, 0.75))
+figure2
+```
+
+```{r fig-2-tiff}
+tiff("../figures/Figure2.tiff", 
+     units = "in", width = 7.5, height = 7, res = 300)
+figure2
+dev.off()
+```
+
+
+## FIGURE 3 : BACTERIA : Differential Abundance
+
+## Part 1 : Differential Abundance Summary Plot with error bars
+
+```{r figure3p1-bacterial-differential-abundance, fig.width=7.5, fig.height=5}
+## Dataframe with significant taxa : significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated
+
+significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames <-
+  data.frame(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated) %>%
+  unite(TaxaName, c(Genus, Species), sep = "_", remove = FALSE)
+
+## Calculating standard errors
+significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$stderror_lower <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$log2FoldChange - significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$lfcSE
+
+significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$stderror_upper <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$log2FoldChange + significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$lfcSE
+
+plot3_1 <- ggplot(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames,
+                  aes(x=log2FoldChange, y=TaxaName)) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = 0, alpha = 0.5, linetype = 2) +
+  geom_errorbarh(aes(xmin = stderror_lower, 
+                     xmax = stderror_upper, 
+                     height=0.1)) +
+  labs(x = "log2 Fold Change", y = "") +
+  theme(plot.subtitle = element_text(hjust = 0.5, size = 10),
+        axis.title.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10)) +
+  scale_y_discrete(limits = rev(unique(sort(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$TaxaName))))
+plot3_1
+```
+
+## Part 2 : Ground Truth Plots of all significantly differentially abundant taxa
+
+```{r figure3p2-ground-truth-plots, fig.width=7.5, fig.height=3}
+#Normalized Abundance of Bacterial Taxa assoc with Growth Velocity prior to growth period
+
+# Add taxa name
+ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>% select(ASV,TaxaName)
+
+abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(abundancedataframe.rlog.pregrowth, 
+                                                         ASV_TaxaNames, 
+                                                         by="ASV")
+
+plot3_2DF <- subset(abundancedataframe.rlog.pregrowth_withTaxaNames,
+                    Growth_Status_Prior %in% c("Adequate","Moderate", "Poor"))
+
+plot3_2DF <- mutate(plot3_2DF,
+                    "correctedName" = str_replace_all(string = TaxaName,
+                                                      pattern = "_",
+                                                      replacement = " "))
+
+plot3_2 <- ggplot(plot3_2DF, 
+                  aes(y = Abundance, 
+                      x = Growth_Status_Prior)) +
+  geom_boxplot(width = 0.5,  
+               outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, 
+              width = 0.15, 
+              size = 1.5) +
+  scale_y_log10() +
+  ylab("Normalized Abd. (log10)") +
+  theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          strip.text = element_text(size = 8)) +
+  facet_wrap(~ correctedName,
+             labeller = labeller(correctedName = label_wrap_gen(20)),
+             nrow = 3)
+plot3_2
+```
+
+
+## ARRANGE Panel Figure 3
+
+```{r figure3-panel-arrange, fig.width=7, fig.height=7}
+figure3 <- ggarrange(plot3_1, plot3_2,
+                     labels = c("A", "B"), 
+                     nrow=2,
+                     heights = c(1,2))
+figure3
+```
+
+```{r fig-3-tiff, eval=FALSE}
+tiff("../figures/Figure3.tiff",
+     units = "in", width = 7, height = 7, res = 300)
+figure3
+dev.off()
+```
+
+## FIGURE 7: BACTERIA-PHAGE ASSOCIATIONS/RELATIONSHIPS
+
+
+## Part 1 : Relationship between Bacteria and Phage Richness 
+
+```{r figure7p1}
+plot7_1 <- ggplot(bacteria_phage_richnessdiversity, 
+                  aes(Bacterial_Richness,y=Phage_Richness, color=Growth_Status_Prior)) +
+  geom_point(aes(color=Growth_Status_Prior)) +
+  stat_smooth(method = "lm", se=T) +
+  labs(y="Phage Richness", x="Bacterial Richness",  color="Growth Velocity") +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10))
+```
+
+## Part 2 : Relationship between Bacteria and Phage Shannon Diversity
+
+```{r figure2p2}
+plot7_2 <- ggplot(bacteria_phage_richnessdiversity,
+                  aes(Bacterial_ShannonDiversity,
+                      y=Phage_ShannonDiversity,
+                      color=Growth_Status_Prior)) +
+  geom_point(aes(color=Growth_Status_Prior)) +
+  stat_smooth(method = "lm", se=T) +
+  labs(y="Phage Shannon Diversity", 
+       x="Bacterial Shannon Diversity", 
+       color="Growth Velocity") +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10))
+```
+
+## ARRANGE Panel Figure 7
+
+```{r figure7-panel-arrange, fig.width=7.5, fig.height=6}
+figure7 <- ggarrange(plotX_1, plotX_2, nrow = 2,
+                     labels = c("A", "B"))
+figure7
+```
+
+```{r figure-7-tiff}
+tiff("../figures/Figure7.tiff",
+     units = "in", width = 7, height = 6, res = 300)
+figure7
+dev.off()
+```
+
+## Supplemental Figure 2 : Correlation heatmap of significant bacteria vs phage abundances in samples from 2 growth velocities
+
+```{r fig.width=7.5, fig.height=6}
+CombinedHeatmaps <- readRDS("../data/RDataObjects/CombinedHeatmap.RDS")
+oldHeatmapColNames <- colnames(CombinedHeatmaps)
+newHeatmapColNames <- map_chr(.x = oldHeatmapColNames,
+                              .f = ~ str_remove(., pattern = "\\.[:digit:]$"))
+CombinedHeatmapsModified <- CombinedHeatmaps
+colnames(CombinedHeatmapsModified) <- newHeatmapColNames
+
+combinedHeatmapFigure <- pheatmap(CombinedHeatmapsModified,
+                                  cluster_rows = FALSE,
+                                  cluster_cols = FALSE)
+
+```
+
+```{r figure-S2-tiff}
+tiff("../figures/FigureS2.tiff",
+     units = "in", width = 7, height = 6, res = 300)
+combinedHeatmapFigure
+dev.off()
+```
+
+### Session Info
+
+```{r session-info}
+writeLines(capture.output(sessionInfo()), 
+           "EE_Bacterial_Figures_session_info.txt")
+Sys.Date()
+getwd()
+sessionInfo()
+```
+

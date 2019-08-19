@@ -1,0 +1,3 @@
+[submodule "shared_R_scripts"]
+	path = shared_R_scripts
+	url = https://github.com/RachelRodgers/shared_R_scripts.git
