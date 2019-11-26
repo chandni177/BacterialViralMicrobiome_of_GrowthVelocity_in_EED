@@ -36,10 +36,10 @@ source("./shared_R_scripts/Helper_Functions.R")
 Read-in data.
 
 ```{r read-in-data, include=FALSE}
-physeqRaw <- import_biom("../data/RdAB_compare-Taxonomy_Mar28_Meganv615.biom")
+physeqRaw <- import_biom("./data/RdAB_compare-Taxonomy_Mar28_Meganv615.biom")
 physeqRaw # 3571 x 159 
 
-sampleData <- read.delim("../documents/rdArdB_mapping_v2.txt")
+sampleData <- read.delim("./documents/rdArdB_mapping_v2.txt")
 dim(sampleData) # 157 x 41 (157 samples instead of 159 - 2 samples are missing)
 
 # Who's missing?
@@ -47,25 +47,20 @@ physeqNames <- sample_names(physeqRaw)
 mapNames <- as.character(sampleData$X.Series.)
 missing <- physeqNames[!(physeqNames %in% mapNames)]
 missing
+
+# These are supposed to be missing
+# 28_LNS_78 sequenced twice, using the later sample, from run M235
+# 30_LNS_78 sequenced twice, using the later sample, from run M235
 ```
 
-Note that while the physeq data contains 159 samples, the viral sample metadata contains only 157. We will add data from the 16S metadata file to these two samples that are missing from the virus metadata.
+Note that while the physeq data contains 159 samples, the viral sample metadata contains only 157. This is because two samples were sequenced twice (28 LNS 78, and 30 LNS 78) and should be missing here.  We will add data from the 16S metadata file to these two samples that are missing from the virus metadata.
 
 Format metadata:
-  * add rows for the two samples which are in the biom file but missing from the viral metadata file (will be adding metadata from 16S analysis later)
   * adjust levels for EE_status_based_on_LM and EE_status_based_on_percL
   * add the columns Growth_Status_Prior, Growth_Status_Latter, and bf_at_sampling from the file "EE_mapping_16s_v2.txt"
   * add the column Growth_Faltering, based on Growth_Status_Prior: "Not_Faltering" = Adequate + Moderage, "Faltering" = Poor
 
 ```{r modify-sample-data}
-#----- Add Rows for Missing Samples -----#
-metadataCols <- colnames(sampleData)
-missingSamplesDF <- as.data.frame(matrix(nrow = 2, ncol = length(metadataCols)))
-colnames(missingSamplesDF) <- metadataCols
-missingSamplesDF$X.Series. <- missing
-sampleData <- rbind(sampleData, missingSamplesDF)
-dim(sampleData) # 159 x 41
-
 #----- Reorder Factors -----#
 # EE_status_based_on_LM 
 levels(sampleData$EE_status_based_on_LM)
@@ -83,7 +78,7 @@ table(sampleData$EE_status_based_on_percL)
 #----- Add Growth_Status Columns -----#
 # Add the columns Growth_Status_Prior, Growth_Status_Latter, and bf_at_sampling
 #   from the 16s mapping file EE_mapping_16s_v2.txt
-metadata16s <- read.delim("../documents/EE_mapping_16S_v2.txt")
+metadata16s <- read.delim("./documents/EE_mapping_16S_v2.txt")
 dim(metadata16s) # 157 x 43
 
 colsToAdd <- select(metadata16s, 
@@ -135,7 +130,7 @@ physeqVirus <- subset_taxa(physeqRaw, Rank2 == "Viruses")
 physeqVirus # 3035 x 159
 
 physeqVirus <- merge_phyloseq(physeqVirus, sample_data(sampleDataFull))
-physeqVirus # 3035 x 159 
+physeqVirus # 3035 x 157
 ```
 
 ## Remove Duplicate Samples
@@ -144,8 +139,7 @@ physeqVirus # 3035 x 159
 # Remove Duplicate samples. None of these failed. We will pick the samples 
 #   sequenced later (second time) patients 51, 67, 203, 205
 # Remove final sample of patientID 133, unknown EE_status
-# 28_LNS_78 sequenced twice, using the later sample, from run M235
-# 30_LNS_78 sequenced twice, using the later sample, from run M235
+
 
 discardSamples <- c("Manary_GCE_Pediatric_Stool_16_LNS_51_initial_NA0000440680",
                     "Manary_GCE_Pediatric_Stool_17_LNS_51_midstudy_NA0000494512",
@@ -160,7 +154,7 @@ discardSamples <- c("Manary_GCE_Pediatric_Stool_16_LNS_51_initial_NA0000440680",
                     "Manary_GCE_Pediatric_Stool_62_LNS_205_midstudy_NA0000441999",
                     "Manary_GCE_Pediatric_Stool_63_LNS_205_final_NA0000426287")
 
-# 159 - 12 = 147 samples expected
+# 157 - 12 = 145 samples expected
 
 physeqVirusFinal <- physeqVirus %>% 
   subset_samples(!(sample_name %in% discardSamples))
@@ -169,8 +163,8 @@ physeqVirusFinal # 3035 x 147 (some taxa now have 0 reads now)
 ```
 
 ```{r save-physeqVirusFinal}
-saveRDS(physeqVirus, "../data/physeqObjects/physeqVirus.RDS") # contains all taxa and samples
-saveRDS(physeqVirusFinal, "../data/physeqObjects/physeqVirusFinal.RDS") # contains all taxa and no duplicated samples
+saveRDS(physeqVirus, "./data/physeqObjects/physeqVirus.RDS") # contains all taxa and samples
+saveRDS(physeqVirusFinal, "./data/physeqObjects/physeqVirusFinal.RDS") # contains all taxa and no duplicated samples
 ```
 
 ## Abundance DF from physeqVirusFinal for Generating Ground Truth Plots
@@ -226,7 +220,7 @@ setnames(psViralNormalizedMelt, old = "OTU", new = "ASV")
 
 ```{r save-psViralNormalizedMelt}
 saveRDS(psViralNormalizedMelt, 
-        file = "../data/RDataObjects/psViralNormalizedMelt.RDS")
+        file = "./data/RDataObjects/psViralNormalizedMelt.RDS")
 ```
 
 ## Selection of Phage Taxa of Interest
@@ -240,7 +234,7 @@ fullTaxTable <- data.table(data.frame(as(tax_table(physeqVirusFinal), "matrix"))
 
 ```{r choose-selected-phage}
 # Read in list of off selected viruses
-selectedPhage <- read.delim("../documents/selected_phage.txt",
+selectedPhage <- read.delim("./documents/selected_phage.txt",
                               stringsAsFactors = FALSE, header = FALSE,
                               col.names = "viral_group",
                               strip.white = TRUE) # 12 phage
@@ -302,7 +296,7 @@ physeqSubset <- subset_taxa(physeqVirusFinal,
                               Rank5 %in% rankMap$Rank5 |
                               Rank4 %in% rankMap$Rank4 |
                               Rank3 %in% rankMap$Rank3)
-physeqSubset # 1760 taxa x 147 samples
+physeqSubset # 1760 taxa x 145 samples
 
 # Are any samples now depleted?
 any(sample_sums(physeqSubset) == 0) # FALSE
@@ -387,6 +381,7 @@ otherPhages <- c("Leviviridae", "unclassified Caudovirales",
 Next we will add a Rank0 that will contain either the same name as that found in Rank1, or will be some kind of "other" category depending on Rank1's value.
 
 ```{r add-rank-0}
+largeTaxDFModified <- largeTaxDF
 largeTaxDFModified$Rank0 <- NA
 
 for (i in 1:nrow(largeTaxDFModified)) {
@@ -416,7 +411,7 @@ table(largeTaxDFFinal$Category) # just to make sure everything was binned
 ```{r replace-taxonomy-table}
 physeqSubsetModifiedTaxonomy <- physeqSubset
 tax_table(physeqSubsetModifiedTaxonomy) <- tax_table(as.matrix(largeTaxDFFinal))
-physeqSubsetModifiedTaxonomy # 1760 x 147
+physeqSubsetModifiedTaxonomy # 1760 x 145
 ```
 
 ## Remove Low-Read Taxa
@@ -432,13 +427,13 @@ physeqSubsetFinal <- prune_taxa(keepTaxa, physeqSubsetModifiedTaxonomy)
 # Have any samples been totally depleted now?
 any(sample_sums(physeqSubsetFinal) == 0) # FALSE
 
-physeqSubsetFinal # 1021 x 147
+physeqSubsetFinal # 1021 x 145
 ```
 
 ```{r save-physeqSubsetFinal}
 # physeqSubsetFinal contains just the phage of interest
-saveRDS(physeqSubsetFinal, "../data/physeqObjects/physeqSubsetFinal.RDS")
-save.image("../data/RDataObjects/EE_Virome_Preprocessing.RData")
+saveRDS(physeqSubsetFinal, "./data/physeqObjects/physeqSubsetFinal.RDS")
+save.image("./data/RDataObjects/EE_Virome_Preprocessing.RData")
 ```
 
 ### Session Info

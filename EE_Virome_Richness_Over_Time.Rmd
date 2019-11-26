@@ -35,15 +35,15 @@ In this markdown I will be combining the selected phage from MEGAN and the eukar
 First I will load the phage physeq object (physeqSubsetFinal).
 
 ```{r phage-data}
-load("../data/RDataObjects/EE_Virome_Preprocessing.RData")
-physeqSubsetFinal # 1021 x 147
+load("./data/RDataObjects/EE_Virome_Preprocessing.RData")
+physeqSubsetFinal # 1021 x 145
 head(sample_names(physeqSubsetFinal)) # contins all samples (healthy + EE)
 ```
 
 Now I will load in the eukaryotic viral data for all samples.
 
 ```{r physeqEukFamily}
-physeqEukFamily <- readRDS("../data/physeqObjects/physeqEukFamily.RDS")
+physeqEukFamily <- readRDS("./data/physeqObjects/physeqEukFamily.RDS")
 physeqEukFamily # 35 x 131
 head(sample_names(physeqEukFamily)) # contains all samples (healthy + EE)
 ```
@@ -121,7 +121,7 @@ fullViralSampleData <- merge(sampleDataFull, totalViralRichness,
 # remove samples having no age_months
 fullViralSampleData <- filter(fullViralSampleData, !(is.na(age_months)))
 
-saveRDS(fullViralSampleData, file = "../data/RDataObjects/fullViralSampleData.RDS")
+saveRDS(fullViralSampleData, file = "./data/RDataObjects/fullViralSampleData.RDS")
 ```
 
 ```{r regression-viral-richness-by-age}
@@ -143,7 +143,7 @@ viralRichPlot
 Save fullViralSampleData for use in EE_Bacterial_Figures.Rmd (for figure panel 1).
 
 ```{r save-fullViralSampleData}
-saveRDS(fullViralSampleData, "../data/RDataObjects/fullViralSampleData.RDS")
+saveRDS(fullViralSampleData, "./data/RDataObjects/fullViralSampleData.RDS")
 ```
 
 ### Session Info

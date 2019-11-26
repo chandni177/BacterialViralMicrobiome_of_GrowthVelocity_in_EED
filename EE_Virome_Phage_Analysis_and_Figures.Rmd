@@ -35,9 +35,9 @@ source("./shared_R_scripts/Helper_Functions.R")
 
 # Load Viral Pre-processing Data
 
-load("../data/RDataObjects/EE_Virome_Preprocessing.RData")
-physeqVirusFinal # 3035 x 147 (contains all taxa and healthy + EE samples)
-physeqSubsetFinal # 1021 x 147 (contains selected phage and healthy + EE samples)
+load("./data/RDataObjects/EE_Virome_Preprocessing.RData")
+physeqVirusFinal # 3035 x 145 (contains all taxa and healthy + EE samples)
+physeqSubsetFinal # 1021 x 145 (contains selected phage and healthy + EE samples)
 ```
 
 ## Sample Selection - Growth_Status_Prior, Moderate & Severe EE

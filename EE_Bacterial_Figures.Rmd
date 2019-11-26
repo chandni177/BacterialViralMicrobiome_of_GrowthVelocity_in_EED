@@ -10,7 +10,7 @@ output: html_document
 Code for generation of basic bacterial figures.
 
 ```{r load-data, message=FALSE}
-load("../data/RDataObjects/Jul30_BacteriaData.RData")
+load("./data/RDataObjects/Jul30_BacteriaData.RData")
 
 # Load libraries
 library("phyloseq")
@@ -27,6 +27,7 @@ library("ggrepel")
 library("pheatmap")
 library("FSA")
 library("gmodels")
+library("multcomp")
 library("tidyverse")
 
 theme_set(theme_bw(base_size = 14))
@@ -70,7 +71,7 @@ plot1_2
 
 ```{r figure1p3-delta-HAZ}
 ## Use data from file: plottingdeltaHAZ_dataforfigure.txt
-deltaHAZ <- read.table(file = "../documents/plottingdeltaHAZ_dataforfigure.txt", 
+deltaHAZ <- read.table(file = "./documents/plottingdeltaHAZ_dataforfigure.txt", 
                        header = TRUE)
 
 plot1_3 <- ggplot(deltaHAZ, 
@@ -429,6 +430,29 @@ figure7 <- ggarrange(plotX_1, plotX_2, nrow = 2,
                      labels = c("A", "B"))
 figure7
 ```
+
+## LM for Richness & Diversity by Growth Velocity Groups
+
+```{r lm-richness}
+growth_categories <- c("Adequate", "Moderate", "Poor")
+
+## test ##
+richnessDF <- bacteria_phage_richnessdiversity %>% 
+  filter(Growth_Status_Prior == "Adequate")
+
+lm_richness_adequate <- lm(Phage_Richness ~ Bacterial_Richness,
+                           data = richnessDF)
+
+# get adj r2
+summary(lm_richness_adequate)$adj.r.squared
+
+K <- diag(2)
+lm_richness <- glht(lm_richness_adequate, linfct = K)
+glsum <- summary(lm_richness)
+summary(lm_richness)$test$pvalues
+```
+
+
 
 ```{r figure-7-tiff}
 tiff("../figures/Figure7.tiff",
