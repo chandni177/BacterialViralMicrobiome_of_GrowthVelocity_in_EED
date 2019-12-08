@@ -10,7 +10,7 @@ output: html_document
 Code for generation of basic bacterial figures.
 
 ```{r load-data, message=FALSE}
-load("./data/RDataObjects/Jul30_BacteriaData.RData")
+load("../data/RDataObjects/Jul30_BacteriaData.RData")
 
 # Load libraries
 library("phyloseq")
@@ -71,7 +71,7 @@ plot1_2
 
 ```{r figure1p3-delta-HAZ}
 ## Use data from file: plottingdeltaHAZ_dataforfigure.txt
-deltaHAZ <- read.table(file = "./documents/plottingdeltaHAZ_dataforfigure.txt", 
+deltaHAZ <- read.table(file = "../documents/plottingdeltaHAZ_dataforfigure.txt", 
                        header = TRUE)
 
 plot1_3 <- ggplot(deltaHAZ, 
@@ -152,7 +152,7 @@ plot1_5 <- ggplot(fullViralSampleData,
   geom_point(size = 1.5) + 
   stat_smooth(method = lm) +
   labs(y="Viral Richness", x="Age in months") +
-  annotate("text", x = 20, y = 600, label = "paste(italic(R) ^ 2, \" = 0.021\")", 
+  annotate("text", x = 20, y = 600, label = "paste(italic(R) ^ 2, \" = 0.023\")", 
            parse = TRUE) +
   theme(axis.title = element_text(size = 10),
         axis.text = element_text(size = 10))
@@ -330,11 +330,14 @@ plot3_1
 
 ## Part 2 : Ground Truth Plots of all significantly differentially abundant taxa
 
+There may be a problem with the incorrect taxa getting pulled?
+
 ```{r figure3p2-ground-truth-plots, fig.width=7.5, fig.height=3}
 #Normalized Abundance of Bacterial Taxa assoc with Growth Velocity prior to growth period
 
 # Add taxa name
-ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>% select(ASV,TaxaName)
+ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>%
+  select(ASV,TaxaName)
 
 abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(abundancedataframe.rlog.pregrowth, 
                                                          ASV_TaxaNames, 
@@ -353,9 +356,7 @@ plot3_2 <- ggplot(plot3_2DF,
                       x = Growth_Status_Prior)) +
   geom_boxplot(width = 0.5,  
                outlier.shape = NA) +
-  geom_jitter(alpha = 0.7, 
-              width = 0.15, 
-              size = 1.5) +
+  geom_jitter(alpha = 0.7, width = 0.15) +
   scale_y_log10() +
   ylab("Normalized Abd. (log10)") +
   theme(legend.position = "none",
@@ -369,6 +370,101 @@ plot3_2 <- ggplot(plot3_2DF,
              nrow = 3)
 plot3_2
 ```
+
+```{r, eval=FALSE}
+# do for all bacteria in the deseq results
+
+generaToPlot <- ASV_TaxaNames$ASV
+names(generaToPlot) <- ASV_TaxaNames$TaxaName
+
+PlotGroundTruthByBF <- function(genusToPlot) {
+  currentASV <- genusToPlot[[]]
+}
+
+subsetDFList <- vector(mode = "list", length = length(generaToPlot))
+
+for (i in 1:length(generaToPlot)) {
+  currentASV <- generaToPlot[[i]]
+  currentName <- names(generaToPlot)[i]
+  subsetDF <- plot3_2DF %>% 
+    filter(ASV == currentASV & Growth_Status_Prior != "Moderate")
+  subsetDFList[[i]] <- subsetDF
+  names(subsetDFList)[i] <- currentName
+}
+
+GroundTruthByBF <- function(currentDF, currentTitle) {
+  ggplot(currentDF, aes_string(y = "Abundance", x = "bf_at_sampling")) +
+    geom_boxplot(width = 0.5, outlier.shape = NA) +
+    geom_jitter(aes(size = baseMean), alpha = 0.7, width = 0.15) +
+    scale_y_log10() +
+    ylab("Normalized Abd. (log10)") +
+    ggtitle(currentTitle) +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          strip.text = element_text(size = 8),
+          plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~Growth_Status_Prior)
+}
+
+for (i in 1:length(subsetDFList)) {
+  currentDF <- subsetDFList[[i]]
+  currentTitle <- names(subsetDFList)[i]
+  plot(GroundTruthByBF(currentDF, currentTitle))
+}
+```
+
+```{r, eval=FALSE}
+plot3_2 <- ggplot(subset(plot3_2DF, Genus == "Megasphaera" &
+                           Growth_Status_Prior != "Moderate"), 
+                  aes(y = Abundance, 
+                      x = bf_at_sampling)) +
+  geom_boxplot(width = 0.5,  
+               outlier.shape = NA) +
+  geom_jitter(aes(size = baseMean), alpha = 0.7, 
+              width = 0.15) +
+  scale_y_log10() +
+  ylab("Normalized Abd. (log10)") +
+  theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          strip.text = element_text(size = 8)) +
+  facet_wrap(~Growth_Status_Prior)
+  #facet_wrap(~ correctedName,
+             #labeller = labeller(correctedName = label_wrap_gen(20)),
+             #nrow = 3)
+plot3_2
+```
+
+
+Volcano plot of significant taxa
+
+```{r, fig.width=11, fig.height=8.5}
+sigTaxaGoodPoor <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames 
+
+sigBacteriaVolcano <- ggplot(sigTaxaGoodPoor,
+                             aes(x = log2FoldChange,
+                                 y = -log10(padj))) +
+  geom_point(aes(color = TaxaName, size = baseMean)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_hline(yintercept = -log10(0.05)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+          axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5),
+          axis.title = element_text(size = 12),
+          axis.text = element_text(size = 12),
+          legend.text = element_text(size = 12))
+
+sigBacteriaVolcano
+
+ggplotly(sigBacteriaVolcano)
+```
+
+
 
 
 ## ARRANGE Panel Figure 3

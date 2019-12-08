@@ -35,7 +35,7 @@ source("./shared_R_scripts/Helper_Functions.R")
 
 # Load Viral Pre-processing Data
 
-load("./data/RDataObjects/EE_Virome_Preprocessing.RData")
+load("../data/RDataObjects/EE_Virome_Preprocessing.RData")
 physeqVirusFinal # 3035 x 145 (contains all taxa and healthy + EE samples)
 physeqSubsetFinal # 1021 x 145 (contains selected phage and healthy + EE samples)
 ```
@@ -48,20 +48,40 @@ Now we will select samples with Adequate, Moderate, or Poor growth based on Grow
 # This also includes "healthy" samples.
 levels(sample_data(physeqSubsetFinal)$Growth_Status_Prior)
 table(sample_data(physeqSubsetFinal)$Growth_Status_Prior)
-# Adequate = 37, Moderate = 42, Poor = 14 (total of 93 samples)
+# Adequate = 39, Moderate = 42, Poor = 15 (total of 96 samples)
 
 physeqPrior <- physeqSubsetFinal %>% 
   subset_samples(Growth_Status_Prior %in% c("Adequate", "Moderate", "Poor")) %>% 
   RemoveMissingTaxa()
-physeqPrior # 1006 x 93
+physeqPrior # 1008 x 96
 
 table(sample_data(physeqPrior)$EE_status_based_on_percL)
-# No = 6, Moderate = 43, Severe = 44 (87 samples have EE)
+# No = 13, Moderate = 39, Severe = 44 (83 samples have EE)
 
 physeqPriorAllEEPhage <- physeqPrior %>% 
   subset_samples(EE_status_based_on_percL != "No") %>% 
   RemoveMissingTaxa()
-physeqPriorAllEEPhage # 998 x 87
+physeqPriorAllEEPhage # 1004 x 83
+
+table(sample_data(physeqPriorAllEEPhage)$Growth_Status_Prior)
+# Adequate = 33, Moderate = 37, Poor = 13
+
+phageSamples <- data.frame("phage_samples" = sample_names(physeqPriorAllEEPhage))
+phageSamplesUnique <- phageSamples %>% 
+  mutate("unique_id" = str_extract(phage_samples, 
+                                   pattern = "-[:digit:]+-LNS-?[:digit:]+-"),
+         "unique_id" = str_remove_all(unique_id, pattern = "-"))
+
+saveRDS(physeqPriorAllEEPhage, "../data/physeqObjects/physeqPriorAllEEPhage.RDS")
+```
+
+```{r euk-phage-sample-compare, eval=FALSE}
+eukFamSamples <- readRDS("./data/RDataObjects/eukFamSamples.RDS") # 91
+phageSamplesVec <- phageSamplesUnique$unique_id # 87
+
+eukFamSamples[!eukFamSamples %in% phageSamplesVec]
+
+phageSamplesVec[!phageSamplesVec %in% eukFamSamples]
 ```
 
 ## Phage Community Composition by Growth Status Prior
@@ -88,6 +108,7 @@ phageCommComp <- ggplot(phageAbundanceDF,
   geom_bar(stat = "identity", width = 1, position = "fill") +
   labs(y = "Relative Abundance") +
   facet_wrap(~ Growth_Status_Prior, scales = "free_x") +
+  theme_bw() +
   theme(axis.text.x = element_blank(),
         axis.title.x = element_blank(),
         axis.title.y = element_text(size = 12),
@@ -130,6 +151,7 @@ phageRichnessByGrowth <- ggplot(phageAlphaDiv,
   stat_compare_means(label = "p.format", method = "kruskal.test", 
                      hide.ns = TRUE, label.x.npc = 0.5,
                      size = 3.5) +
+  theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.title.y = element_text(size = 10))
@@ -146,6 +168,7 @@ phageDiversityByGrowth <- ggplot(phageAlphaDiv,
   stat_compare_means(label = "p.format", method = "kruskal.test", 
                      hide.ns = TRUE, label.x.npc = 0.5, label.y.npc = 0.07,
                      size = 3.5) +
+  theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.title.y = element_text(size = 10))
@@ -177,14 +200,15 @@ phageDunnTest <- dunnTest(Shannon ~ Growth_Status_Prior, phageDivDunnDF)
 phageDunnTest$res
 ```
 
-adequate - moderate p-adj = 0.006
+adequate - moderate p-adj = 0.005
 
 ### Phage MDS of Bray Distances
 
 ```{r mdsBrayPhage}
+
 set.seed(40072100)
 RunAdonis(physeqPriorAllEEPhage, distance = "bray", 
-          category = "Growth_Status_Prior")
+          category = "Growth_Status_Prior") # p = 0.069
 
 set.seed(40072100)
 ordBrayPhage <- phyloseq::ordinate(physeq = physeqPriorAllEEPhage,
@@ -201,8 +225,9 @@ mdsBrayPhage <- ggplot(mdsBrayPhageDF,
   xlab(paste0("MDS 1 (", round(100*eigenValues[1], digits = 1), "%)")) +
   ylab(paste0("MDS 2 (", round(100*eigenValues[2], digits = 1), "%)")) +
   geom_point(size=2, alpha = 0.7) +
-  annotate("text", x = -0.35, y = 0.22, label = "p = 0.025", size = 3.5) +
+  annotate("text", x = -0.1, y = 0.3, label = "p = 0.069", size = 3.5) +
   scale_color_manual(values = c("red", "blue", "green")) +
+  theme_bw() +
   theme(legend.position = "bottom",
         legend.title = element_blank(),
         legend.text = element_text(size = 10),
@@ -230,6 +255,11 @@ phagePanel
 Phage panel scaling
 
 ```{r phage-panel-scaling, eval=FALSE}
+pdf("../figures/Figure5.pdf",
+    height = 8.5, width = 11)
+phagePanel
+dev.off()
+
 tiff("../figures/Figure5.tiff", 
      units = "in", width = 7.5, height = 7, res = 300)
 phagePanel
@@ -278,6 +308,11 @@ sampleDataPhageDESeq %>%
   summarize(count = n())
 
 #----- DESeq2 Analysis -----#
+# replace any missing values within bf_at_sampling with "unknown"
+sample_data(physeqPhageNoModerate)$bf_at_sampling <- as.character(sample_data(physeqPhageNoModerate)$bf_at_sampling)
+
+sample_data(physeqPhageNoModerate)$bf_at_sampling[is.na(sample_data(physeqPhageNoModerate)$bf_at_sampling)] <- "unknown"
+
 ddsPhage <- phyloseq_to_deseq2(physeqPhageNoModerate,
                                design = ~ bf_at_sampling + Growth_Status_Prior)
 set.seed(47544091)
@@ -318,7 +353,7 @@ phageSigASVDF <- deseqPhageResultsTable %>%
   filter(Significant == TRUE)
 
 # how many significant taxa were identified?
-length(unique(phageSigASVDF$OTU)) # 18
+length(unique(phageSigASVDF$OTU)) # 17
 
 phageSigASVDFModified <- phageSigASVDF %>% 
   mutate("TaxaName" = paste(Rank1, Rank2, Rank3, Rank4),
@@ -327,26 +362,30 @@ phageSigASVDFModified <- phageSigASVDF %>%
 
 # Fix taxa names by generating a long-to-short name LUT
 sigPhageNamesLong <- phageSigASVDFModified$TaxaName
-sigPhageNamesShort <- c("unclassified Myoviridae",
-                        "unclassified Myoviridae Xanthomonas phage vB-XveM-DIBBI",
+sigPhageNamesShort <- c("unclassified Caudovirales",
+                        "Siphoviridae",
                         "unclassified Myoviridae Bacillus phage BCD7",
-                        "unclassified Myoviridae Pelagibacter phage HTVC008M",
-                        "unclassified Myoviridae Microcystis phage MaMV-DC",
-                        "Myoviridae Bacillus phage CP-51",
-                        "unclassified Myoviridae Clostridium phage phi-MMP01",
-                        "unclassified Myoviridae Enterococcus phage EFDG1",
-                        "unclassified Podoviridae",
-                        "Myoviridae Geobacillus phage GBSV1",
-                        "unclassified Siphoviridae Lactococcus phage Q54",
-                        "unclassified Siphoviridae Clostridium phage phi-SM101",
-                        "unclassified Myoviridae Haemophilus phage SuMu",
-                        "unclassified Siphoviridae Cyanophage PSS2",
+                        "unclassified Siphoviridae Croceibacter phage P2559S",
+                        "unclassified bacterial viruses",
+                        "unclassified Podoviridae Pseudomonas phage AF",
+                        "unclassified Lactococcus phage",
+                        "unclassified Podoviridae Pelagibacter phage HTVC010P",
+                        "unclassified Siphoviridae Croceibacter phage P2559Y",
+                        "Microviridae Gokushovirinae Bdellomicrovirus Bdellovibrio virus MH2K",
+                        "unclassified Myoviridae Rhodothermus phage RM378",
+                        "unclassified Clostridium phage phiCT19406C",
+                        "unclassified Siphoviridae Clostridium phage phiCD111",
+                        "unclassified Siphoviridae",
+                        "unclassified Siphoviridae Listeria phage P40",
                         "unclassified Myoviridae Psychrobacter phage pOW20-A",
-                        "unclassified Siphoviridae Clostridum phage phi-CD6356",
-                        "unclassified Microviridae phi-CA82",
-                        "unclassified Podoviridae Planktothrix phage PaV-LD")
+                        "unclassified Microviridae phi-CA82"  )
+
 sigPhageNamesLUT <- sigPhageNamesShort
 names(sigPhageNamesLUT) <- sigPhageNamesLong
+
+phageNameTable <- enframe(sigPhageNamesLUT)
+#write.table(phageNameTable, "../analyses/phageNameTable.txt",
+            #row.names = FALSE, sep = "\t", quote = FALSE)
 
 phageSigASVDFModified <- phageSigASVDFModified %>% 
   mutate("corrected_TaxaName" = sigPhageNamesLUT[TaxaName]) %>% 
@@ -370,6 +409,11 @@ phageDESeqResultsPlotFinal
 
 ```{r phage-deseq-tiff, eval=FALSE}
 # figure 6
+pdf("../figures/Figure6.pdf",
+    height = 8.5, width = 11)
+phageDESeqResultsPlotFinal
+dev.off()
+
 tiff("../figures/Figure6.tiff", 
      units = "in", width = 7.5, height = 6, res = 300)
 phageDESeqResultsPlotFinal
@@ -384,24 +428,14 @@ phageSigASVVec <- phageSigASVDF$OTU
 sigPhageNormalizedAbdDF <- psViralNormalizedMelt %>% 
   filter(ASV %in% phageSigASVVec)
 
+otuLUT <- as.character(phageSigASVDFModified$corrected_TaxaName)
+names(otuLUT) <- phageSigASVDFModified$OTU
+
 sigPhageNormalizedAbdDFModified <- sigPhageNormalizedAbdDF %>% 
   filter(Growth_Status_Prior %in% c("Adequate", "Moderate", "Poor")) %>% 
-  mutate("TaxaName" = paste(Rank5, Rank6, Rank7, Rank8, sep = " "),
-         "corrected_TaxaName" = sigPhageNamesLUT[TaxaName])
+  mutate(corrected_TaxaName = otuLUT[ASV])
 
-# which taxa didn't get named (if any)
-unnamedTaxa <- sigPhageNormalizedAbdDFModified %>% 
-  filter(is.na(corrected_TaxaName)) %>% 
-  select(TaxaName) %>% 
-  unique()
-
-unnamedTaxa <- as.character(unnamedTaxa$TaxaName)
-class(sigPhageNormalizedAbdDFModified$TaxaName)
-
-sigPhageNormalizedAbdDFModified <- sigPhageNormalizedAbdDFModified %>% 
-  mutate("corrected_TaxaName" = ifelse(is.na(corrected_TaxaName),
-                                       yes = "unclassified Microviridae phi-CA82",
-                                       no = corrected_TaxaName))
+any(is.na(sigPhageNormalizedAbdDFModified$corrected_TaxaName)) # FALSE
 
 # apply levels to this normalized abundance df so order of facets match
 #   order of taxa in the deseq results plot
@@ -419,10 +453,10 @@ groundTruthPlotsFacet <- ggplot(sigPhageNormalizedAbdDFModified,
   ylab("Normalized Abd. (log10)") +
   facet_wrap(~ corrected_TaxaName,
              labeller = labeller(corrected_TaxaName = label_wrap_gen(10)),
-             nrow = 3, ncol = 6) +
+             ncol = 6) +
   theme_bw() +
   theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
         axis.title.x = element_blank(),
         axis.text.y = element_text(size = 10),
         axis.title = element_text(size = 10),

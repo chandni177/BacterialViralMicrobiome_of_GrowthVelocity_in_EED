@@ -35,7 +35,7 @@ In this markdown I will be combining the selected phage from MEGAN and the eukar
 First I will load the phage physeq object (physeqSubsetFinal).
 
 ```{r phage-data}
-load("./data/RDataObjects/EE_Virome_Preprocessing.RData")
+load("../data/RDataObjects/EE_Virome_Preprocessing.RData")
 physeqSubsetFinal # 1021 x 145
 head(sample_names(physeqSubsetFinal)) # contins all samples (healthy + EE)
 ```
@@ -43,8 +43,8 @@ head(sample_names(physeqSubsetFinal)) # contins all samples (healthy + EE)
 Now I will load in the eukaryotic viral data for all samples.
 
 ```{r physeqEukFamily}
-physeqEukFamily <- readRDS("./data/physeqObjects/physeqEukFamily.RDS")
-physeqEukFamily # 35 x 131
+physeqEukFamily <- readRDS("../data/physeqObjects/physeqEukFamily.RDS")
+physeqEukFamily # 34 x 145
 head(sample_names(physeqEukFamily)) # contains all samples (healthy + EE)
 ```
 
@@ -55,73 +55,55 @@ All we need is an OTU table in order to calculate richness.
 phageOTUTable <- as(otu_table(physeqSubsetFinal), "matrix") %>% 
   t() %>% 
   as.data.frame() %>% 
-  rownames_to_column(var = "long_sample_name")
-dim(phageOTUTable) # 147 samples
+  rownames_to_column(var = "long_sample_name") %>% 
+  mutate("unique_id" = str_extract(long_sample_name, 
+                                   pattern = "(-|_)[:digit:]+(-|_)LNS(-|_)?[:digit:]+(-|)"),
+         "unique_id" = str_remove_all(unique_id, pattern = "(-|_)")) %>% 
+  select(long_sample_name, unique_id, everything())
+dim(phageOTUTable) # 145 samples x 1023 taxa
 
 eukOTUTable <- as(otu_table(physeqEukFamily), "matrix") %>% 
   t() %>% 
   as.data.frame() %>% 
-  rownames_to_column(var = "short_sample_name")
-dim(eukOTUTable) # 131 samples
+  rownames_to_column(var = "short_sample_name") %>% 
+  rename(unique_id = short_sample_name)
+dim(eukOTUTable) # 145 samples x 35 taxa
 
-# make a long-to-short sample name LUT
-allSampleData <- sampleDataFull %>% 
-  rownames_to_column(var = "long_sample_name")
-sampleNameLUT <- as.character(allSampleData$sample_name)
-names(sampleNameLUT) <- as.character(allSampleData$long_sample_name)
-head(sampleNameLUT)
-
-# add short sample name column to phageOTUTable
-phageOTUTable <- phageOTUTable %>% 
-  mutate("short_sample_name" = sampleNameLUT[long_sample_name]) %>% 
-  select(short_sample_name, everything())
-
-# merge phage and eukaryotic otu tables on the short sample name
+# merge phage and eukaryotic otu tables on unique_id
 fullViralOTUTable <- merge(phageOTUTable, eukOTUTable,
-                           by = "short_sample_name",
-                           all = TRUE)
-
-# Fill in missing short_sample_name by modifying the long_sample_name column
-fullViralOTUTable <- fullViralOTUTable %>% 
-  mutate(short_sample_name = ifelse(is.na(short_sample_name),
-                                    yes = str_extract(string = long_sample_name, 
-                                                      pattern = "Manary.*"),
-                                    no = short_sample_name))
-
-# set any NAs in the table to 0
-fullViralOTUTable[is.na(fullViralOTUTable)] <- 0
+                           by = "unique_id",
+                           all = TRUE) # 145 x 1057
 
 # change the table back into otu class
 viralOTUTable <- fullViralOTUTable %>% 
   select(-long_sample_name) %>% 
-  column_to_rownames(var = "short_sample_name") %>% 
+  column_to_rownames(var = "unique_id") %>% 
   as.matrix() %>% 
   t()
+dim(viralOTUTable) # 1055 taxa x 145 samples
 
 viralOTUTableFinal <- otu_table(viralOTUTable, taxa_are_rows = TRUE)
 
 # Calculate richness on this table
 totalViralRichness <- estimate_richness(viralOTUTableFinal,
                                         measures = "Observed")
-row.names(totalViralRichness) <- c(gsub("\\.", "-", rownames(totalViralRichness)))
-totalViralRichness <- rownames_to_column(totalViralRichness, var = "sample_name")
+row.names(totalViralRichness) <- c(str_replace(string = rownames(totalViralRichness),
+                                               pattern = "^X",
+                                               replacement = ""))
+totalViralRichness <- rownames_to_column(totalViralRichness, var = "unique_id")
 
-# merge with sample data, expect 159 rows
-sampleDataFull$sample_name <- as.character(sampleDataFull$sample_name)
-sampleDataFullModified <- sampleDataFull %>% 
-  rownames_to_column(var = "long_sample_name") %>% 
-  mutate("sample_name" = ifelse(is.na(sample_name),
-                                yes = str_extract(string = long_sample_name,
-                                                  pattern = "Manary.*"),
-                                no = sample_name))
+# merge with sample data, expect 157 rows
+# add an ID column for merging to sampleDataCorrected
+sampleDataCorrectedWithID <- sampleDataCorrected %>% 
+  rownames_to_column(var = "sample_long_name") %>% 
+  mutate("id" = str_extract(sample_name,
+                            pattern = "(-|_)[:digit:]+(-|_)LNS(-|_)?[:digit:]+(-|)"),
+         "id" = str_remove_all(id, pattern = "(-|_)"))
 
-fullViralSampleData <- merge(sampleDataFull, totalViralRichness,
-                             by = "sample_name", all = TRUE)
+fullViralSampleData <- merge(sampleDataCorrectedWithID, totalViralRichness,
+                             by.x = "id", by.y = "unique_id", all = TRUE)
 
-# remove samples having no age_months
-fullViralSampleData <- filter(fullViralSampleData, !(is.na(age_months)))
-
-saveRDS(fullViralSampleData, file = "./data/RDataObjects/fullViralSampleData.RDS")
+saveRDS(fullViralSampleData, file = "../data/RDataObjects/fullViralSampleData.RDS")
 ```
 
 ```{r regression-viral-richness-by-age}
@@ -143,7 +125,7 @@ viralRichPlot
 Save fullViralSampleData for use in EE_Bacterial_Figures.Rmd (for figure panel 1).
 
 ```{r save-fullViralSampleData}
-saveRDS(fullViralSampleData, "./data/RDataObjects/fullViralSampleData.RDS")
+saveRDS(fullViralSampleData, "../data/RDataObjects/fullViralSampleData.RDS")
 ```
 
 ### Session Info

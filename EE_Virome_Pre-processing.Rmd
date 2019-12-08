@@ -36,92 +36,190 @@ source("./shared_R_scripts/Helper_Functions.R")
 Read-in data.
 
 ```{r read-in-data, include=FALSE}
-physeqRaw <- import_biom("./data/RdAB_compare-Taxonomy_Mar28_Meganv615.biom")
+physeqRaw <- import_biom("../data/RdAB_compare-Taxonomy_Mar28_Meganv615.biom")
 physeqRaw # 3571 x 159 
 
-sampleData <- read.delim("./documents/rdArdB_mapping_v2.txt")
+sampleData <- read.delim("../documents/rdArdB_mapping_v2.txt")
 dim(sampleData) # 157 x 41 (157 samples instead of 159 - 2 samples are missing)
 
 # Who's missing?
+# These are supposed to be missing:
+# 28_LNS_78 sequenced twice, using the later sample from run M235
+# 30_LNS_78 sequenced twice, using the later sample from run M235
 physeqNames <- sample_names(physeqRaw)
 mapNames <- as.character(sampleData$X.Series.)
 missing <- physeqNames[!(physeqNames %in% mapNames)]
 missing
-
-# These are supposed to be missing
-# 28_LNS_78 sequenced twice, using the later sample, from run M235
-# 30_LNS_78 sequenced twice, using the later sample, from run M235
 ```
 
-Note that while the physeq data contains 159 samples, the viral sample metadata contains only 157. This is because two samples were sequenced twice (28 LNS 78, and 30 LNS 78) and should be missing here.  We will add data from the 16S metadata file to these two samples that are missing from the virus metadata.
+Note that while the physeq data contains 159 samples, the viral sample metadata contains only 157. This is because two samples were sequenced twice (28 LNS 78, and 30 LNS 78) and should be missing here.
 
 Format metadata:
-  * adjust levels for EE_status_based_on_LM and EE_status_based_on_percL
+  * correct the EE status based on percent L within rdArdB_mapping_v2.txt 
+  * adjust levels for EE_status_based_on_percL
   * add the columns Growth_Status_Prior, Growth_Status_Latter, and bf_at_sampling from the file "EE_mapping_16s_v2.txt"
-  * add the column Growth_Faltering, based on Growth_Status_Prior: "Not_Faltering" = Adequate + Moderage, "Faltering" = Poor
 
 ```{r modify-sample-data}
+#----- Generate Correct Values for EE_status_based_on_percL -----#
+sampleDataModified <- sampleData %>% 
+  mutate(EE_status_based_on_percL = case_when(perc_L < 0.2 ~ "No",
+                                              perc_L >= 0.2 & perc_L <= 0.45 ~ "Moderate",
+                                              perc_L > 0.45 ~ "Severe"),
+         unique_id = str_extract(sample_name, "NA[:digit:]+"))
+```
+
+```{r check-EE-matches-bacterial, eval=FALSE}
+# double check that this matches with bacterial data:
+sampleDataCheck <- sampleDataModified %>% 
+  select(unique_id, sample, patient_ID, EE_status_based_on_percL) %>% 
+  rename(sample_id_viral = unique_id, sample_number_viral = sample,
+         patient_id_viral = patient_ID, ee_status_viral = EE_status_based_on_percL)
+
+bacteriaDataCheck <- read.delim("../analyses/bacterial_EE_status.txt",
+                                header = TRUE, sep = "\t")
+
+eeStatusCheck <- merge(bacteriaDataCheck, sampleDataCheck,
+                       by.x = "sample_id_bacteria",
+                       by.y = "sample_id_viral",
+                       all = TRUE)
+
+write.table(eeStatusCheck, file = "../analyses/eeStatusCheck.txt", quote = FALSE,
+            sep = "\t", row.names = FALSE)
+```
+
+```{r modify-sample-data-continued}
 #----- Reorder Factors -----#
-# EE_status_based_on_LM 
-levels(sampleData$EE_status_based_on_LM)
-table(sampleData$EE_status_based_on_LM) # inbetween (34), no (64), yes (59) 
-sampleData$EE_status_based_on_LM <- factor(sampleData$EE_status_based_on_LM,
-                                           levels = c("no", "inbetween", "yes"))
-table(sampleData$EE_status_based_on_LM)
+
 # EE_status_based_on_percL
-levels(sampleData$EE_status_based_on_percL)
-table(sampleData$EE_status_based_on_percL) # Moderate (68), No (17), Severe (72)
-sampleData$EE_status_based_on_percL <- factor(sampleData$EE_status_based_on_percL,
-                                              levels = c("No", "Moderate", "Severe"))
-table(sampleData$EE_status_based_on_percL)
+levels(sampleDataModified$EE_status_based_on_percL)
+table(sampleDataModified$EE_status_based_on_percL) # Moderate (69), No (17), Severe (70)
+sampleDataModified$EE_status_based_on_percL <- factor(sampleDataModified$EE_status_based_on_percL,
+                                                      levels = c("No", "Moderate", "Severe"))
+table(sampleDataModified$EE_status_based_on_percL)
 
 #----- Add Growth_Status Columns -----#
-# Add the columns Growth_Status_Prior, Growth_Status_Latter, and bf_at_sampling
+# Add the columns Growth_Status_Prior and bf_at_sampling
 #   from the 16s mapping file EE_mapping_16s_v2.txt
-metadata16s <- read.delim("./documents/EE_mapping_16S_v2.txt")
+metadata16s <- read.delim("../documents/EE_mapping_16S_v2.txt")
 dim(metadata16s) # 157 x 43
 
 colsToAdd <- select(metadata16s, 
-                    sample_name, Growth_Status_Prior, Growth_Status_Latter,
-                    bf_at_sampling) # 157 samples
+                    Description, Growth_Status_Prior, bf_at_sampling) # 157 samples
 
-# selecting the data for just the samples we have (not all 159 original samples)
-#   so I don't have to filter the data frame for samples with an NA name:
-colsToAddFinal <- filter(colsToAdd, 
-                         sample_name %in% sampleData$sample_name)
-# only 155 cols in colsToAddFinal implies we have two samples that are missing data
-#   (I3578 and I3732).  These samples say "NotToBeCounted" in the PartofStuntingStudy
-#   column, so I will exclude them here.
-sampleDataFull <- merge(sampleData, colsToAddFinal, by = "sample_name", 
+# There are two samples in the bacterial data that we expect to not be present
+#   in viral data:
+#     419914: 100 LNS 104 (No EE)
+#     494505: 97 LNS 75 (Severe EE)
+# So sampleDataFull should have 159 samples, but will drop to 157 when removing
+#   samples not present in viral data.
+
+sampleDataFull <- merge(sampleDataModified, colsToAdd, 
+                        by.x = "unique_id", 
+                        by.y = "Description",
                         all = TRUE) # 159 samples
+sampleDataFull <- filter(sampleDataFull,
+                         !(is.na(sample_name))) # 157 samples (as expected)
+```
 
+```{r fix-growth-status-prior}
+
+#----- Add Missing & Modify Incorrect Growth Statuses -----#
+
+# It was expected that two samples would be included in viral analyses but
+#   excluded from 16S analyses due to the samples failing the 16S process:
+#     69 LNS 232 (Severe EE, final sample for patient 232)
+#     88 LNS 3 (Moderate EE, mid sample for patient 3)
+
+# The growth status for these sample 88 LNS 3 needs to be added here.
+# The growth status for 69 LNS 232 can be excluded since it's a final sample.
+# Additionally some samples are potentially denoted as NotToBeCounted in
+#   Growth_Status_Prior because a subsequent sample for the series was missing
+#   from the 16S data, which is where this information was initially read in.
+#   For these samples, the Growth_Status_Prior column needs to be adjusted
+#   accordingly so samples aren't accidentally left out
+
+# Growth_Status_Prior is calculated by subtracting an initial HAZ from a mid HAZ,
+#   or a mid HAZ from a final HAZ within sample ID.
+table(sampleDataFull$stage)
+table(sampleDataFull$Growth_Status_Prior)
+
+#----- What samples are incorrectly denoted as "NotToBeCounted"? -----#
+growthNotCounted <- sampleDataFull %>% 
+  filter(stage != "final" & 
+           Growth_Status_Prior %in% c("Final_NotToBeCounted", "NotToBeCounted"))
+  
+#----- Which samples are simply missing a value? -----#
+missingGrowthStatusSamples <- sampleDataFull %>% 
+  filter(stage != "final" & is.na(Growth_Status_Prior))
+
+#----- Combine Info and Correct -----#
+samplesGrowthToCorrect <- rbind(growthNotCounted, missingGrowthStatusSamples)
+samplesGrowthToCorrect <- samplesGrowthToCorrect %>% 
+  select(unique_id, sample, patient_ID, stage, HAZ, Growth_Status_Prior)
+
+uniqueIDsToCorrect <- unique(samplesGrowthToCorrect$patient_ID)
+
+uniqueIDsToCorrectDFList <- vector(mode = "list", length = length(uniqueIDsToCorrect))
+
+for (i in 1:length(uniqueIDsToCorrect)) {
+  currentID <- uniqueIDsToCorrect[i]
+  currentDF <- filter(sampleDataFull, patient_ID == currentID)
+  filteredDF <- currentDF %>% 
+    select(unique_id, sample, patient_ID, stage, HAZ, Growth_Status_Prior)
+  uniqueIDsToCorrectDFList[[i]] <- filteredDF
+  names(uniqueIDsToCorrectDFList)[i] <- currentID
+}
+
+# patient 3 (initial and midstudy)
+patient3DF <- uniqueIDsToCorrectDFList$`3`
+row.names(patient3DF) <- patient3DF$stage
+patient3InitDelta <- patient3DF["midstudy", "HAZ"] - patient3DF["initial", "HAZ"] # 0.22 (Adequate)
+patient3MidDelta <- patient3DF["final", "HAZ"] - patient3DF["midstudy", "HAZ"] # -0.44 (Poor)
+patient3DF["initial", "Growth_Status_Prior"] <- "Adequate"
+patient3DF["midstudy", "Growth_Status_Prior"] <- "Poor"
+
+patient3DF$Growth_Status_Prior <- as.character(patient3DF$Growth_Status_Prior)
+
+patient3Growth <- patient3DF %>% 
+  select(unique_id, Growth_Status_Prior) %>% 
+  deframe()
+
+# patient 232 (midstudy)
+patient232DF <- uniqueIDsToCorrectDFList$`232`
+row.names(patient232DF) <- patient232DF$stage
+patient232MidDelta <- patient232DF["final", "HAZ"] - patient232DF["midstudy", "HAZ"] # 0.13 (Adequate)
+patient232DF["midstudy", "Growth_Status_Prior"] <- "Adequate"
+
+patient232DF$Growth_Status_Prior <- as.character(patient232DF$Growth_Status_Prior)
+
+patient232Growth <- patient232DF %>% 
+  select(unique_id, Growth_Status_Prior) %>% 
+  deframe()
+
+correctedGrowthStatus <- c(patient3Growth, patient232Growth)
+
+#----- Add correctedGrowthStatus to sampleDataCorrected -----#
+sampleDataCorrected <- sampleDataFull
+row.names(sampleDataCorrected) <- sampleDataCorrected$unique_id
+
+for (i in 1:length(correctedGrowthStatus)) {
+  currentID <- names(correctedGrowthStatus)[i]
+  currentStatus <- correctedGrowthStatus[[i]]
+  sampleDataCorrected[currentID, "Growth_Status_Prior"] <- currentStatus
+}
+
+```
+
+```{r change-growth-status-labels}
 # Change labels of Growth_Status_Prior
-table(sampleDataFull$Growth_Status_Prior)
-sampleDataFull$Growth_Status_Prior <- factor(sampleDataFull$Growth_Status_Prior,
-                                             labels = c("Final_NotToBeCounted",
-                                                        "Adequate", "Moderate",
-                                                        "NotToBeCounted",
-                                                        "Poor"))
-table(sampleDataFull$Growth_Status_Prior)
+table(sampleDataCorrected$Growth_Status_Prior)
+# Adequate (45), Moderate (42), Poor (17)
+# Final_NotToBeCounted (51), NotToBeCounted (1)
 
-dim(sampleDataFull) # 159 x 44
+dim(sampleDataCorrected) # 157 x 44
 
-#----- Add Growth Faltering Column -----#
-sampleDataFull <- sampleDataFull %>% 
-  mutate("Growth_Faltering" = case_when(Growth_Status_Prior == "Poor" ~ "Faltering",
-                                        Growth_Status_Prior == "Adequate" |
-                                          Growth_Status_Prior == "Moderate" ~ "Not Faltering",
-                                        TRUE ~ "no_growth_status"))
-sampleDataFull$Growth_Faltering <- as.factor(sampleDataFull$Growth_Faltering)
-levels(sampleDataFull$Growth_Faltering)
-sampleDataFull$Growth_Faltering <- factor(sampleDataFull$Growth_Faltering,
-                                          levels = c("Faltering",
-                                                     "Not Faltering",
-                                                     "no_growth_status"))
-table(sampleDataFull$Growth_Faltering)
-# 85 not_faltering, 16 faltering
-
-sampleDataFull <- column_to_rownames(sampleDataFull, var = "X.Series.")
+row.names(sampleDataCorrected) <- NULL
+sampleDataCorrected <- column_to_rownames(sampleDataCorrected, var = "X.Series.")
 ```
 
 ```{r physeqVirus}
@@ -129,7 +227,7 @@ sampleDataFull <- column_to_rownames(sampleDataFull, var = "X.Series.")
 physeqVirus <- subset_taxa(physeqRaw, Rank2 == "Viruses")
 physeqVirus # 3035 x 159
 
-physeqVirus <- merge_phyloseq(physeqVirus, sample_data(sampleDataFull))
+physeqVirus <- merge_phyloseq(physeqVirus, sample_data(sampleDataCorrected))
 physeqVirus # 3035 x 157
 ```
 
@@ -138,8 +236,6 @@ physeqVirus # 3035 x 157
 ```{r remove-samples}
 # Remove Duplicate samples. None of these failed. We will pick the samples 
 #   sequenced later (second time) patients 51, 67, 203, 205
-# Remove final sample of patientID 133, unknown EE_status
-
 
 discardSamples <- c("Manary_GCE_Pediatric_Stool_16_LNS_51_initial_NA0000440680",
                     "Manary_GCE_Pediatric_Stool_17_LNS_51_midstudy_NA0000494512",
@@ -158,20 +254,22 @@ discardSamples <- c("Manary_GCE_Pediatric_Stool_16_LNS_51_initial_NA0000440680",
 
 physeqVirusFinal <- physeqVirus %>% 
   subset_samples(!(sample_name %in% discardSamples))
-any(taxa_sums(physeqVirusFinal) == 0)
-physeqVirusFinal # 3035 x 147 (some taxa now have 0 reads now)
+
+any(taxa_sums(physeqVirusFinal) == 0) # TRUE
+
+physeqVirusFinal # 3035 x 145 (some taxa now have 0 reads now)
 ```
 
 ```{r save-physeqVirusFinal}
-saveRDS(physeqVirus, "./data/physeqObjects/physeqVirus.RDS") # contains all taxa and samples
-saveRDS(physeqVirusFinal, "./data/physeqObjects/physeqVirusFinal.RDS") # contains all taxa and no duplicated samples
+saveRDS(physeqVirus, "../data/physeqObjects/physeqVirus.RDS") # contains all taxa and samples
+saveRDS(physeqVirusFinal, "../data/physeqObjects/physeqVirusFinal.RDS") # contains all taxa and no duplicated samples
 ```
 
 ## Abundance DF from physeqVirusFinal for Generating Ground Truth Plots
 
 We will calculate normalized abundances of physeqVirulFinal (containing all non-duplicated samples and all viral taxa) for later ground truth plots we'll make from DESeq analyses.  Note this can be a potentially long-running chunk.
 
-```{r calculate-normalized-abundances-for-physeqVirusFinal, cache=TRUE}
+```{r calculate-normalized-abundances-for-physeqVirusFinal}
 # all viruses, all samples
 
 # Replace any NAs in the Growth_Status_Prior column with "none"
@@ -220,12 +318,12 @@ setnames(psViralNormalizedMelt, old = "OTU", new = "ASV")
 
 ```{r save-psViralNormalizedMelt}
 saveRDS(psViralNormalizedMelt, 
-        file = "./data/RDataObjects/psViralNormalizedMelt.RDS")
+        file = "../data/RDataObjects/psViralNormalizedMelt.RDS")
 ```
 
 ## Selection of Phage Taxa of Interest
 
-Select only the phage groups of interest:  The list of phages are found in "documents/selected_phage.txt."
+Select only the phage groups of interest:  The list of phages are found in "../documents/selected_phage.txt."
 
 ```{r fullTaxTable}
 fullTaxTable <- data.table(data.frame(as(tax_table(physeqVirusFinal), "matrix")),
@@ -234,7 +332,7 @@ fullTaxTable <- data.table(data.frame(as(tax_table(physeqVirusFinal), "matrix"))
 
 ```{r choose-selected-phage}
 # Read in list of off selected viruses
-selectedPhage <- read.delim("./documents/selected_phage.txt",
+selectedPhage <- read.delim("../documents/selected_phage.txt",
                               stringsAsFactors = FALSE, header = FALSE,
                               col.names = "viral_group",
                               strip.white = TRUE) # 12 phage
@@ -419,9 +517,8 @@ physeqSubsetModifiedTaxonomy # 1760 x 145
 To help reduce noise in the data, we will be removing any taxa from physeqSubsetFinal having fewer than 3 total reads in the data set.
 
 ```{r remove-low-abd-taxa}
-# originally 2691 taxa in physeqSubsetFinal
 taxaSumsSubsetFinal <- taxa_sums(physeqSubsetModifiedTaxonomy)
-keepTaxa <- names(taxaSumsSubsetFinal)[taxaSumsSubsetFinal > 3] # 1380
+keepTaxa <- names(taxaSumsSubsetFinal)[taxaSumsSubsetFinal > 3] # 1021
 physeqSubsetFinal <- prune_taxa(keepTaxa, physeqSubsetModifiedTaxonomy)
 
 # Have any samples been totally depleted now?
@@ -432,8 +529,8 @@ physeqSubsetFinal # 1021 x 145
 
 ```{r save-physeqSubsetFinal}
 # physeqSubsetFinal contains just the phage of interest
-saveRDS(physeqSubsetFinal, "./data/physeqObjects/physeqSubsetFinal.RDS")
-save.image("./data/RDataObjects/EE_Virome_Preprocessing.RData")
+saveRDS(physeqSubsetFinal, "../data/physeqObjects/physeqSubsetFinal.RDS")
+save.image("../data/RDataObjects/EE_Virome_Preprocessing.RData")
 ```
 
 ### Session Info

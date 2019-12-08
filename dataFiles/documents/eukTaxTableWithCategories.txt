@@ -1,0 +1,49 @@
+Category	Family
+RNA single-stranded	Acyrthosiphon Pisum Virus
+DNA double-stranded	Adenoviridae
+RNA single-stranded	Alphaflexiviridae
+DNA single-stranded	Anelloviridae
+DNA double-stranded	Ascoviridae
+DNA double-stranded	Asfarviridae
+RNA single-stranded	Astroviridae
+DNA double-stranded	Baculoviridae
+DNA single-stranded	Begomovirus-associated alphasatellites
+RNA single-stranded	Betaflexiviridae
+RNA single-stranded	Caliciviridae
+DNA double-stranded	Caulimoviridae
+DNA single-stranded	Circoviridae
+RNA single-stranded	circular single stranded RNA satellites
+RNA single-stranded	Closteroviridae
+RNA single-stranded	Dicistroviridae
+DNA double-stranded	dsDNA  viruses
+other eukaryotic viruses	environmental samples
+DNA single-stranded	Geminiviridae
+DNA single-stranded	Genomoviridae
+Archaeal virus	Haloviruses
+RNA single-stranded	unclassified Picornavirales
+DNA double-stranded	Hytrosaviridae
+RNA single-stranded	Iflaviridae
+DNA double-stranded	Iridoviridae
+RNA single-stranded	Luteoviridae
+RNA double-stranded	Partitiviridae
+DNA single-stranded	Parvoviridae
+RNA single-stranded	Permutotetraviridae
+RNA double-stranded	Picobirnaviridae
+RNA single-stranded	Picornaviridae
+DNA double-stranded	Pithoviridae
+DNA double-stranded	Polyomaviridae
+RNA single-stranded	Potyviridae
+RNA double-stranded	Reoviridae
+RNA single-stranded	Retroviridae
+RNA single-stranded	Secoviridae
+DNA single-stranded	single stranded DNA satellites
+DNA single-stranded	Smacovirusgroup
+RNA single-stranded	Sobemovirus
+RNA single-stranded	Solemoviridae
+DNA single-stranded	ssDNA viruses
+RNA single-stranded	ssRNA negative strand viruses
+RNA single-stranded	ssRNA positive strand viruses
+RNA single-stranded	ssRNA viruses
+RNA double-stranded	Totiviridae
+RNA single-stranded	Virgaviridae
+other eukaryotic viruses	unclassified eukaryotic viruses

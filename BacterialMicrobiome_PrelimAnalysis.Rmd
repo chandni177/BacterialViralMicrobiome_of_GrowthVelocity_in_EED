@@ -22,7 +22,6 @@ knitr::opts_chunk$set(fig.width=8,
 
 ##Load libraries
 ```{r initiate-environment, include=FALSE}
-
 library("tidyverse")
 packageVersion("tidyverse")
 library("reshape2")
@@ -59,39 +58,32 @@ library("corrplot")
 packageVersion("corrplot")
 library("shiny")
 packageVersion("shiny")
-
-setwd("~/Box/Stunting_in_EnvEnteropathy/Scripts_and_DataFiles/")
-source("runDifferentialAbundance.R")
-
+#setwd("~/Box/Stunting_in_EnvEnteropathy/Scripts_and_DataFiles/")
+#setwd("~/Documents/Lori_EE/EnvironmentalEnteropathy/MAIN_EnvEnteropathy/16S/environmental-enteropathy-16S/")
+#source("runDifferentialAbundance.R")
 ```
 
 ```{r global-theme-settings, include=FALSE}
 # Set global theming
 theme_set(theme_bw(base_size = 12,
                    base_family = "Arial"))
-
 ```
 
 ```{r load-data, include=FALSE}
-
 ## Read in data
-
 # Load Phyloseq Object from Preprocessing
-ps0 <- readRDS("ps0.EE_holtz.rdp.RDS")
+ps0 <- readRDS("./data/physeqObjects/ps0.EE_bacterial_holtz.rdp.RDS")
 ps0
 #phyloseq-class experiment-level object
 #otu_table()   OTU Table:         [ 3403 taxa and 157 samples ]
 #tax_table()   Taxonomy Table:    [ 3403 taxa by 7 taxonomic ranks ]
 #phy_tree()    Phylogenetic Tree: [ 3403 tips and 3401 internal nodes ]
-
 # Load updated mapping data
-map <- import_qiime_sample_data("EE_mapping_16S_v2.txt")
-dim(map)
-
+map <- import_qiime_sample_data("./documents/EE_mapping_16S_v2.txt")
+dim(map) # 157 x 45
 # Merge ASV table with mapping data
 ps0 <- merge_phyloseq(ps0, map)
 ps0
-
 # View sample variables & generate basic stats
 sample_variables(ps0)
 sd(sample_sums(ps0))
@@ -103,30 +95,20 @@ get_taxa_unique(ps0, "Phylum")
 #[13] "Lentisphaerae"             "Chloroflexi"  
 ntaxa(ps0)
 #[1] 3403
-
 reads.raw <- 
   qplot(rowSums(otu_table(ps0))) +
   xlab("Counts-per-sample") +
   ggtitle("Raw Reads")
-
 reads.raw.log <- qplot(log10(rowSums(otu_table(ps0)))) +
   xlab("Logged counts-per-sample") +
   ggtitle("Log10 Transformed")
-
 ggarrange(reads.raw, reads.raw.log, ncol = 2)
-
 ```
 
 ## Removal of Duplicate Samples
 ```{r  duplicate-sample-removal, include=TRUE}
 #Remove Duplicate samples
-
 ps0
-#phyloseq-class experiment-level object
-#otu_table()   OTU Table:         [ 3403 taxa and 157 samples ]
-#sample_data() Sample Data:       [ 157 samples by 45 sample variables ]
-#tax_table()   Taxonomy Table:    [ 3403 taxa by 7 taxonomic ranks ]
-#phy_tree()    Phylogenetic Tree: [ 3403 tips and 3401 internal nodes ]
 
 ps1 <- ps0 %>%
   subset_samples(
@@ -143,35 +125,25 @@ ps1 <- ps0 %>%
     sample_name != "Manary_GCE_Pediatric_Stool_62_LNS_205_midstudy_NA0000441999" &
     sample_name != "Manary_GCE_Pediatric_Stool_63_LNS_205_final_NA0000426287"
    )
-ps1
-#phyloseq-class experiment-level object
-#otu_table()   OTU Table:         [ 3403 taxa and 144 samples ]
-#sample_data() Sample Data:       [ 144 samples by 45 sample variables ]
-#tax_table()   Taxonomy Table:    [ 3403 taxa by 7 taxonomic ranks ]
-#phy_tree()    Phylogenetic Tree: [ 3403 tips and 3401 internal nodes ]
+ps1 # 3403 x 45
 
 ```
 
 
 ```{r factor-adjustments, include=FALSE}
 #Factor reordering and renaming
-
 # Examine the way the sample data look now
 levels(sample_data(ps1)$stage)
-
 # Reorder to: initial, midstudy, final
 sample_data(ps1)$stage <- factor(sample_data(ps1)$stage, levels = c("initial", "midstudy", "final"))
 levels(sample_data(ps1)$stage)
-
 sample_data(ps1)$EE_status_based_on_percL
 sample_data(ps1)$EE_status_based_on_percL <- factor(sample_data(ps1)$EE_status_based_on_percL, levels = c("No", "Moderate", "Severe"))
 sample_data(ps1)$EE_status_based_on_percL
-
 ```
 
 
 ```{r set-up-data-and-metadata, include=TRUE}
-
 # Combine sample counts and taxonomy with sample metadata
 ss <- sample_sums(ps1)
 sd <- as.data.frame(sample_data(ps1))
@@ -181,16 +153,12 @@ ss.df <- merge(sd, data.frame("ASV" = ss), by ="row.names") # merge ss with sd b
 ##Sample Assessment
 ```{r sample-removal-identification}
 # Plot data by main variable (EE status or Growth Status)
-
 #Threshold for the minimum number of acceptable reads.
 y = 1000
-
 # x-axis variable you want to examine
 x = "age_months"
-
 # label to overlay on the points that are below threshold y. To indicate low abundant samples
 label = "Description"
-
 # Plot
 p.ss.boxplot<- ggplot(ss.df, aes_string(x, y = "ASV")) + # x is what you assigned it above
   geom_boxplot(outlier.colour="NA", aes(group = stage)) +
@@ -205,26 +173,22 @@ p.ss.boxplot<- ggplot(ss.df, aes_string(x, y = "ASV")) + # x is what you assigne
   theme(legend.position = "NULL") +
   theme(axis.title.x = element_blank()) + geom_text(aes(label = sample),hjust = 0, nudge_x = 0.05)
 p.ss.boxplot
-
 ## NONE OF THE SAMPLES HAD READS BELOW OUR THRESHOLD. Hence, NONE were removed.
 ```
 
 
 ```{r sampling-timeline}
-
 #Plot sampling timeline
 ggplot(sd, aes(age_months,color=EE_status_based_on_percL,y=reorder(factor(patient_ID),age_months))) + 
   geom_point(size = 3) + 
   geom_line(aes(group = patient_ID)) +
   ggtitle("Sampling Timeline") +
   theme(legend.position = "bottom")
-
 ```
 
 
 ##Overall sample relationship to evaluate sample outliers
 ```{r outlier-sample-evaluation}
-
 # Outlier evaluation
 out.bray <- ordinate(prune_samples(sample_sums(ps1) >=2, ps1), method = "NMDS", distance = "bray")
 p.NMDS.outlier <- plot_ordination(prune_samples(sample_sums(ps1) >=2, ps1), out.bray, color = "EE_status_based_on_percL", axes = c(1,2)) +
@@ -233,7 +197,6 @@ p.NMDS.outlier <- plot_ordination(prune_samples(sample_sums(ps1) >=2, ps1), out.
   ggtitle("NMDS of Bray Distances \nOutlier Evaluation")
   #stat_ellipse(type = "norm", geom = "polygon", alpha = 1/10, aes(fill = EE_status_based_on_percL))
 p.NMDS.outlier
-
 # NO SAMPLES WERE REMOVED AS OUTLIERS (NO CLEAR OUTLIERS FOUND)
 ```
 
@@ -241,11 +204,9 @@ p.NMDS.outlier
 ```{r taxon-cleaning}
 # Removing sequences not classified as Bacteria
 # Removing sequences classified as either mitochondria or chlorplast
-
 # Remove taxa represented by 0 reads
 ps1.remove0readstaxa <- prune_taxa(taxa_sums(ps1) > 0, ps1)
 ntaxa(ps1.remove0readstaxa)
-#[1] 3241
 
 ps2 <- ps1.remove0readstaxa %>%
   subset_taxa(
@@ -255,10 +216,4 @@ ps2 <- ps1.remove0readstaxa %>%
     Phylum != "Cyanobacteria/Chloroplast"
   )
 ps2
-#phyloseq-class experiment-level object
-#otu_table()   OTU Table:         [ 2420 taxa and 144 samples ]
-#sample_data() Sample Data:       [ 144 samples by 46 sample variables ]
-#tax_table()   Taxonomy Table:    [ 2420 taxa by 7 taxonomic ranks ]
-#phy_tree()    Phylogenetic Tree: [ 2420 tips and 2531 internal nodes ]
-
 ```

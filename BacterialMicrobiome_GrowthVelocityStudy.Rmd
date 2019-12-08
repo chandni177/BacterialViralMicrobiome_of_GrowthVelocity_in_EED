@@ -9,27 +9,20 @@ editor_options:
 ### Study children with EED - adequate/moderate/poor growth velocity, prior to growth
 
 ```{r sample-selection-and-setup}
-
 ## SAMPLE SELECTION
-
 ## Remove samples with HEALTHY EE status
 ps2.healthysamplesremoved <- ps2 %>%
   subset_samples(EE_status_based_on_percL != "No")
 ps2.healthysamplesremoved
-
-
 ## SELECT GOOD, MODERATE and POOR growth samples - PRIOR TO GROWTH PERIOD
 ps2.goodgrowthpoorgrowth.priorsamplesonly <- ps2.healthysamplesremoved %>%                 
  subset_samples(Growth_Status_Prior %in% c("Adequate", "Poor"))
 ps2.goodgrowthpoorgrowth.priorsamplesonly
 #otu_table()   OTU Table:         [ 2432 taxa and 44 samples ]
-
 ps2.goodmoderatepoorgrowth.priorsamplesonly <- ps2.healthysamplesremoved %>%                 
  subset_samples(Growth_Status_Prior %in% c("Adequate", "Poor", "Moderate"))
 ps2.goodmoderatepoorgrowth.priorsamplesonly
 #otu_table()   OTU Table:         [ 2432 taxa and 81 samples ]
-
-
 ps2.moderategrowthpoorgrowth.priorsamplesonly <- ps2.healthysamplesremoved %>%                 
  subset_samples(Growth_Status_Prior %in% c("Moderate", "Poor"))
 ps2.moderategrowthpoorgrowth.priorsamplesonly
@@ -37,38 +30,41 @@ ps2.moderategrowthpoorgrowth.priorsamplesonly
 ```
 
 ```{r taxon-cleaning}
-
 ## Remove Taxa with ZERO reads
-
 ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria <- prune_taxa(taxa_sums(ps2.goodgrowthpoorgrowth.priorsamplesonly) > 0, ps2.goodgrowthpoorgrowth.priorsamplesonly)
 ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria
 #otu_table()   OTU Table:         [ 1135 taxa and 44 samples ]
-
 ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria <- prune_taxa(taxa_sums(ps2.goodmoderatepoorgrowth.priorsamplesonly) > 0, ps2.goodmoderatepoorgrowth.priorsamplesonly)
+ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria
 #otu_table()   OTU Table:         [ 1715 taxa and 81 samples ]
-
-
 ps2.moderategrowthpoorgrowth.priorsamplesonly.bacteria <- prune_taxa(taxa_sums(ps2.moderategrowthpoorgrowth.priorsamplesonly) > 0, ps2.moderategrowthpoorgrowth.priorsamplesonly)
 ## 1394 taxa, 49 samples
+```
 
+```{r save-metadata, eval=FALSE}
+analyzedBacterialMetadata <- as(sample_data(
+  ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria), "data.frame")
+
+analyzedBacterialMetadata <- analyzedBacterialMetadata %>% 
+  select(sample_name, Growth_Status_Prior, age_months,
+         gender, WHZ, HAZ, breastfed_months, intervention)
+
+write.table(analyzedBacterialMetadata, file = "./documents/analyzedBacterialMetadata.txt",
+            quote = FALSE, sep = "\t", row.names = FALSE)
 ```
 
 
 ## COMMUNITY COMPOSITION AND RELATIVE ABUNDANCE
 ```{r community-composition}
-
 ## COMMUNITY COMPOSITION AND RELATIVE ABUNDANCE PLOTS
 ## THREE GROWTH CATEGORIES
-
 threshold=0.01
-
 ps2.goodmoderatepoorgrowth.priorsamplesonly.phylum <- ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria %>%
   tax_glom(taxrank = "Phylum") %>%                         # agglomerate at phylum level
   transform_sample_counts(function(x) {x/sum(x)} ) %>%     # Transform to relative abundance
   psmelt() %>%                                             # Melt to long format
   filter(Abundance > threshold) %>%                        # Filter low abundance taxa
   arrange(Phylum)
-
 p.goodmoderatepoor.communitybarplot.prior <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.phylum, aes(x = sample_name, y = Abundance, fill = Phylum)) + 
   geom_bar(stat = "identity", width = 0.9, position = "fill") +
   labs(title = "Community Composition by Growth Status", y="Relative Abundance", x="Growth status") +
@@ -78,29 +74,22 @@ p.goodmoderatepoor.communitybarplot.prior <- ggplot(ps2.goodmoderatepoorgrowth.p
   theme(axis.text.x = element_blank())
   #theme(axis.title.x = element_blank()) +
 p.goodmoderatepoor.communitybarplot.prior
-
 ```
 
 
 ## ALPHA DIVERSITY
 ```{r estimate-richness}
-
 ## CALCULATE RICHNESS = THREE GROUPS
-
 ## PRIOR
 diversity.goodmoderatepoor.prior <- estimate_richness(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, measures = c("Observed","Shannon"))
 row.names(diversity.goodmoderatepoor.prior) <- c(sub('\\X',"",rownames(diversity.goodmoderatepoor.prior)))
 head(diversity.goodmoderatepoor.prior)
-
 sampledata.ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria <- as.data.frame(sample_data(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria))
 ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich <- merge(sampledata.ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, diversity.goodmoderatepoor.prior, by ="row.names") # merge sample data by row names
-
 write.table(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,file="Stunting/ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich",row.names=FALSE,quote = FALSE,sep="\t")
-
 ```
 
 ```{r plot-alpha-diversity}
-
 # PLOT ALPHA DIVERSITY - PRIOR
 ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, aes(age_months,color=Growth_Status_Prior,y=Observed)) + 
   geom_point(size = 3) + 
@@ -108,62 +97,103 @@ ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, aes(age_months
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   #scale_y_continuous(breaks = seq(0, 800, by = 200)) +
   labs(title="Bacterial Richness for each Patient, with Age", y="Observed Richness", x="Age in Months", color="Growth Status")
-
 p.rich.prior <- ggboxplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, x ="Growth_Status_Prior", y = "Observed", outlier.shape = NA) +
   geom_jitter(width = 0.2) +
   labs(y = "Richness", x="", title="Richness") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   stat_compare_means(label = "p.format", method = "kruskal.test", hide.ns = TRUE)
 p.rich.prior
-
 p.sd.prior <- ggboxplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, x = "Growth_Status_Prior", y = "Shannon", outlier.shape = NA) +
   geom_jitter(width = 0.2) +
   labs(y = "Shannon diversity", x="Height for Age growth status (3months)", title="Shannon Diversity") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   stat_compare_means(label = "p.format", method = "kruskal.test", hide.ns = TRUE)
-
 ggarrange(p.rich.prior, p.sd.prior, nrow = 2, labels = c("A)", "B)"))
+```
+
+```{r}
+## Model Richness and Shannon Diversity using delta HAZ prior (as a continuous variable instead of 3 separate Growth Velocity categories)
+# Using the phyloseq object : ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, and it's richness : ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich
+
+regression_bacterialrichness_continuous_deltaHAZprior <- lm(deltaHAZ_Prior ~ Observed + age_months + gender + bf_at_sampling + (1|patient_ID), data=ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich)
+
+summary(regression_bacterialrichness_continuous_deltaHAZprior)
+#Call:
+#lm(formula = deltaHAZ_Prior ~ Observed + age_months + gender + 
+#    bf_at_sampling + (1 | patient_ID), data = ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich)
+
+#Residuals:
+#     Min       1Q   Median       3Q      Max 
+#-0.63038 -0.11626  0.03192  0.15702  0.50783 
+
+#Coefficients: (1 not defined because of singularities)
+#                     Estimate Std. Error t value Pr(>|t|)
+#(Intercept)        -5.194e-02  1.880e-01  -0.276    0.783
+#Observed           -1.654e-05  6.327e-04  -0.026    0.979
+#age_months          1.564e-03  6.993e-03   0.224    0.824
+#genderM            -5.374e-02  6.027e-02  -0.892    0.375
+#bf_at_samplingYes  -5.270e-02  8.396e-02  -0.628    0.532
+#1 | patient_IDTRUE         NA         NA      NA       NA
+
+#Residual standard error: 0.2517 on 76 degrees of freedom
+#Multiple R-squared:  0.02057,	Adjusted R-squared:  -0.03098 
+#F-statistic: 0.399 on 4 and 76 DF,  p-value: 0.8088
+
+regression_bacterialdiversity_continuous_deltaHAZprior <- lm(deltaHAZ_Prior ~ Shannon + age_months + gender + bf_at_sampling + (1|patient_ID), data=ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich)
+
+summary(regression_bacterialdiversity_continuous_deltaHAZprior)
+#Call:
+#lm(formula = deltaHAZ_Prior ~ Shannon + age_months + gender + 
+#    bf_at_sampling + (1 | patient_ID), data = ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich)
+
+#Residuals:
+#     Min       1Q   Median       3Q      Max 
+#-0.57572 -0.14168  0.03286  0.15475  0.50846 
+
+#Coefficients: (1 not defined because of singularities)
+#                     Estimate Std. Error t value Pr(>|t|)
+#(Intercept)        -0.2517382  0.2374857  -1.060    0.292
+#Shannon             0.0857570  0.0645790   1.328    0.188
+#age_months         -0.0009082  0.0066632  -0.136    0.892
+#genderM            -0.0638631  0.0592630  -1.078    0.285
+#bf_at_samplingYes  -0.0576423  0.0825935  -0.698    0.487
+#1 | patient_IDTRUE         NA         NA      NA       NA
+
+#Residual standard error: 0.2489 on 76 degrees of freedom
+#Multiple R-squared:  0.04277,	Adjusted R-squared:  -0.007613 
+#F-statistic: 0.8489 on 4 and 76 DF,  p-value: 0.4987
 
 ```
 
 
 ## BETA DIVERSITY
 ```{r beta-diversity}
-
 # unifrac
 ord.ps2.goodmoderatepoor.uni.prior <- ordinate(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, method = "PCoA", distance = "unifrac")
-
 # PCoA plot
 p.ord.uni.prior <- plot_ordination(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, ord.ps2.goodmoderatepoor.uni.prior, color = "Growth_Status_Prior") +
   geom_point(size=3, alpha = 0.7) +
   scale_color_brewer(palette = "Dark2") +
   ggtitle("UniFrac")
 p.ord.uni.prior
-
 # weighted unifrac
 ord.ps2.goodmoderatepoor.wuni.prior <- ordinate(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, method = "PCoA", distance = "wunifrac")
-
 # PCoA plot
 p.ord.wuni.prior <- plot_ordination(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, ord.ps2.goodmoderatepoor.wuni.prior, color="Growth_Status_Prior") +
   geom_point(size=3, alpha = 0.7) +
   scale_color_brewer(palette = "Dark2") +
   ggtitle("wUniFrac")
 p.ord.wuni.prior
-
 ggarrange(p.ord.uni.prior, p.ord.wuni.prior, nrow = 2, labels = c("A)", "B)"), common.legend = TRUE, legend = "bottom")
-
 ```
 
 
 ## BETA DIVERSITY SIGNIFICANCE BY ADONIS
 ```{r ADONIS}
-
 ## HELPFUL LINK
 ## http://deneflab.github.io/MicrobeMiseq/demos/mothur_2_phyloseq.html#permanova
-
 # Set a random seed so that exact results can be reproduced
 set.seed(1000)
-
 # Function to run adonis test on a physeq object and a variable from metadata 
 doadonis <- function(physeq, category) {
   bdist <- phyloseq::distance(physeq, "wUnifrac")
@@ -180,11 +210,8 @@ doadonis <- function(physeq, category) {
   print("Betadisper results:")
   print(p$tab)
 }
-
-
 doadonis(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, "Growth_Status_Prior")
 ## ADEQUATE MODERATE POOR : wUnifrac
-
 #          Df SumsOfSqs  MeanSqs F.Model      R2 Pr(>F)
 #col        2    0.0808 0.040408 0.76584 0.01926  0.634
 #Residuals 78    4.1156 0.052763         0.98074       
@@ -193,58 +220,42 @@ doadonis(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, "Growth_Status_Pr
 #          Df     Sum Sq     Mean Sq        F N.Perm Pr(>F)
 #Groups     2 0.01281246 0.006406232 1.243553    999  0.283
 #Residuals 78 0.40182116 0.005151553       NA     NA     NA
-
 ```
 
 
 ## DIFFERENTIAL ABUNDANCE TESTING
 ```{r prevalence-filter-before-differential-testing}
-
 prevdf.prior <- apply(X = otu_table(ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria),MARGIN = ifelse(taxa_are_rows(ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria), yes = 1, no = 2),FUN = function(x){sum(x > 0)})
-
 # Add taxonomy and total read counts to prevdf
 prevdf.prior <- data.frame(Prevalence = prevdf.prior, TotalAbundance = taxa_sums(ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria), tax_table(ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria))
-
 prevalenceThreshold.prior = 0.03 * nsamples(ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria)
 prevalenceThreshold.prior
 #[1] 1.32
-
 # Define which taxa fall within the prevalence threshold
 keepTaxa.prior <- rownames(prevdf.prior)[(prevdf.prior$Prevalence >= prevalenceThreshold.prior)]
-
 ntaxa(ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria)
 #[1] 1135
 # Apply Prevalence filter
 ps2.goodgrowthpoorgrowth.priorsamplesonly.prevfiltered <- prune_taxa(keepTaxa.prior, ps2.goodgrowthpoorgrowth.priorsamplesonly.bacteria)
 ntaxa(ps2.goodgrowthpoorgrowth.priorsamplesonly.prevfiltered)
 #[1] 570
-
 ```
 
 ```{r differential-abundance-testing-priortogrowthsamples}
-
 ## BACTERIAL TAXA DIFFERENCES BETWEEN ADEQUATE & POOR GROWTH
-
 ds.goodbadpriorsamples <- phyloseq_to_deseq2(ps2.goodgrowthpoorgrowth.priorsamplesonly.prevfiltered, ~bf_at_sampling + Growth_Status_Prior)
-
 levels(ds.goodbadpriorsamples$Growth_Status_Prior)
 #[1] "Adequate" "Poor"
 ## Poor/Adequate
-
 dds.goodbadpriorsamples <- DESeq(ds.goodbadpriorsamples, test="Wald", fitType="local", betaPrior = FALSE)
-
 alpha = 0.05
 baseMeanfilter = 10
-
 res.dds.goodbadpriorsamples = results(dds.goodbadpriorsamples, cooksCutoff = FALSE)
 # Filter by pAdj
 sigtab_dds.goodbadpriorsamples = res.dds.goodbadpriorsamples[which(res.dds.goodbadpriorsamples$padj < alpha & res.dds.goodbadpriorsamples$baseMean > baseMeanfilter), ]
-
 sigtab_dds.goodbadpriorsamples = cbind(as(sigtab_dds.goodbadpriorsamples, "data.frame"), as(ps2.goodgrowthpoorgrowth.priorsamplesonly.prevfiltered@tax_table@.Data[rownames(sigtab_dds.goodbadpriorsamples), ], "matrix"))
 head(sigtab_dds.goodbadpriorsamples)
 write.table(sigtab_dds.goodbadpriorsamples, file="Stunting/DifferentialAbundance/sigtab_dds.goodgrowth_and_poorgrowth_priorsamples_bf_confounder.txt", sep = "\t", quote = FALSE)
-
-
 ## ###################
 ## THIS PLOT IS USEFUL
 ## ###################
@@ -259,80 +270,54 @@ p.deseq.goodbadpriorsamples <- ggplot(sigtab_dds.goodbadpriorsamples, aes(x=Fami
   ggtitle("Taxa Differentially Associated by Poor vs Adequate Growth : Prior to growth period") + 
   geom_hline(yintercept = 0, lwd=1.5)
 p.deseq.goodbadpriorsamples
-
 ```
 
 
 ## Ground Truth Plots (Normalized Abundance of Individual Differentially Abundant Taxa)
 ```{r get-normalized-abundance-table}
-
 ## MAKE TABLE OF NORMALIZED ABUNDANCES FOR ALL SAMPLES
 ## Add deseq normalized counts to the phyloseq object (to plot normalized abundance) and convert to a dataframe
-
 replace_counts = function(physeq, dds) {
-
   dds_counts = counts(dds, normalized = TRUE)
   if (!identical(taxa_names(physeq), rownames(dds_counts))) {
     stop("OTU ids don't match")
   }
   otu_table(physeq) = otu_table(dds_counts, taxa_are_rows = TRUE)
   return(physeq)
-
 }
-
 # Make deseq ready object
 ds.all<- phyloseq_to_deseq2(ps2, ~Growth_Status_Prior)
-
-
 # Calculate geometric means prior to estimate size factors
 gm_mean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
-
 geoMeans.ds.all <- apply(counts(ds.all), 1, gm_mean)
 ds.all <- estimateSizeFactors(ds.all, geoMeans = geoMeans.ds.all)
-
 dds.all <- DESeq(ds.all, fitType = "local", test="Wald")
 rlog.all <- replace_counts(ps2, dds.all)
-
 rlog.all <- psmelt(rlog.all)
 rlog.all <- rename(rlog.all, c("OTU" = "ASV"))
-
 ## This is to recreate the DESeq normalization that takes place before differential abundance testing, to generate normalized counts for taxa abundance
-
 ```
 
 
 ```{r plot-taxa-abundance-in-all-growth-categories}
-
 # Get selected taxa and plot
-
 significanttaxa_dataframe_goodbadpriorsamplesbacteria <- as.data.frame(res.dds.goodbadpriorsamples[ which(res.dds.goodbadpriorsamples$padj < alpha & res.dds.goodbadpriorsamples$baseMean > baseMeanfilter), ])
-
 # Check how many differentially abundant taxa came up
 nrow(significanttaxa_dataframe_goodbadpriorsamplesbacteria)
-
 significanttaxa_dataframe_goodbadpriorsamplesbacteria <- rownames_to_column(significanttaxa_dataframe_goodbadpriorsamplesbacteria, var = "ASV")
-
 #Annotate with taxonomy
 ps2.tax_table <- as.data.frame(tax_table(ps2))
 ps2.tax_table <- rownames_to_column(ps2.tax_table, var = "ASV")
-
 significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated <- (left_join(significanttaxa_dataframe_goodbadpriorsamplesbacteria, ps2.tax_table, by = "ASV"))
 colnames(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated)
-
 write.table(significanttaxa_dataframe_goodbadpriorsamplesbacteria, file="Stunting/significanttaxa_dataframe_goodbadpriorsamplesbacteria.txt", row.names=FALSE, sep="\t", quote = FALSE)
-
 # Merge significant taxa information with normalized abundance and metadata
 abundancedataframe.rlog.pregrowth <- inner_join(significanttaxa_dataframe_goodbadpriorsamplesbacteria, rlog.all, by = "ASV")
-
 nrow(abundancedataframe.rlog.pregrowth)
-
 colnames(abundancedataframe.rlog.pregrowth)
-
 write.table(abundancedataframe.rlog.pregrowth, file="Stunting/significanttaxa_dataframe_goodbadpriorsamplesbacteria_withabundance_andmetadata.txt", row.names=FALSE, sep="\t", quote = FALSE)
-
-
 ## PLOT
 ## ####
 ggplot(subset(abundancedataframe.rlog.pregrowth, Growth_Status_Prior %in% c("Adequate","Moderate", "Poor")), aes(y = Abundance, x = Growth_Status_Prior)) +
@@ -343,5 +328,4 @@ ggplot(subset(abundancedataframe.rlog.pregrowth, Growth_Status_Prior %in% c("Ade
   theme(legend.position = "bottom") +
   facet_wrap(ASV~Genus) +
   labs(title="Normalized Abundance of Bacterial Taxa assoc with Stunting", y="Normalized Abundance(log10)", x="Growth Status", subtitle="Pre growth, at Genus-ASV level")
-
 ```
