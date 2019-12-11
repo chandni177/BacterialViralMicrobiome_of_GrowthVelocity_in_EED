@@ -140,6 +140,10 @@ CalculateAlphaDiversity <- function(physeqObj) {
 
 ```{r alphaDivDFList}
 phageAlphaDiv <- CalculateAlphaDiversity(physeqPriorAllEEPhage)
+
+write.table(phageAlphaDiv, "../analyses/phageRichnessAndDiversity_191209.txt",
+            row.names = FALSE, quote = FALSE, sep = "\t")
+
 ```
 
 ```{r phageRichnessByGrowth}
@@ -366,7 +370,7 @@ sigPhageNamesShort <- c("unclassified Caudovirales",
                         "Siphoviridae",
                         "unclassified Myoviridae Bacillus phage BCD7",
                         "unclassified Siphoviridae Croceibacter phage P2559S",
-                        "unclassified bacterial viruses",
+                        "unclassified phage",
                         "unclassified Podoviridae Pseudomonas phage AF",
                         "unclassified Lactococcus phage",
                         "unclassified Podoviridae Pelagibacter phage HTVC010P",
@@ -378,7 +382,7 @@ sigPhageNamesShort <- c("unclassified Caudovirales",
                         "unclassified Siphoviridae",
                         "unclassified Siphoviridae Listeria phage P40",
                         "unclassified Myoviridae Psychrobacter phage pOW20-A",
-                        "unclassified Microviridae phi-CA82"  )
+                        "unclassified Microviridae phi-CA82")
 
 sigPhageNamesLUT <- sigPhageNamesShort
 names(sigPhageNamesLUT) <- sigPhageNamesLong
@@ -443,6 +447,11 @@ sigPhageNormalizedAbdDFModified$corrected_TaxaName <- factor(sigPhageNormalizedA
                                                              levels = rev(correctedTaxaNameLevels))
 
 unique(sigPhageNormalizedAbdDFModified$corrected_TaxaName)
+
+# remove Moderate Growth_Status_Prior
+sigPhageNormalizedAbdDFModified <- sigPhageNormalizedAbdDFModified %>% 
+  filter(Growth_Status_Prior != "Moderate") %>% 
+  droplevels()
 
 groundTruthPlotsFacet <- ggplot(sigPhageNormalizedAbdDFModified,
                                 aes_string(x = "Growth_Status_Prior",
