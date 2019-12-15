@@ -1,0 +1,203 @@
+---
+title: "Untitled"
+author: "Rachel Rodgers"
+date: "December 14, 2019"
+output: html_document
+---
+
+```{r load-libraries}
+library("pheatmap")
+library("tidyverse")
+```
+
+```{r load-data-for-bacterial-normalized-abundances}
+# bacteria
+bacteriaNormalizedMelt <- readRDS("../data/RDataObjects/bacteriaNormalizedMelt.RDS")
+
+# phage
+#psVirusFinalNormalized <- readRDS("../data/RDataObjects/psViralNormalizedMelt.RDS")
+```
+
+```{r filter-sig-taxa-only-bacteria}
+significantBacteriaAbundanceDF <- readRDS("../data/RDataObjects/significantBacterialTaxa.RDS")
+length(unique(significantBacteriaAbundanceDF$ASV)) # 9 taxa
+
+sigBacteria <- unique(significantBacteriaAbundanceDF$ASV)
+
+sigBacteriaNlAbd <- bacteriaNormalizedMelt %>% 
+  filter(ASV %in% sigBacteria) %>% 
+  dplyr::select(ASV, sample_name, Abundance)
+
+# make bacterial re-naming LUT
+# add bacterial taxa name that will go into correlation plots
+significantBacteriaAbundanceDF <- significantBacteriaAbundanceDF %>% 
+  mutate("short_bacteria_name" = paste(Genus, Species, sep = " "))
+
+bacteriaRenamingLUT <- significantBacteriaAbundanceDF %>% 
+  dplyr::select(ASV, short_bacteria_name) %>% 
+  mutate_if(is.factor, as.character) %>% 
+  deframe()
+
+# re-name taxa in sigBacteriaNlAbd
+sigBacteriaNlAbd <- sigBacteriaNlAbd %>% 
+  mutate("bacteria" = bacteriaRenamingLUT[ASV]) %>% 
+  dplyr::select(-ASV)
+```
+
+```{r filter-sig-taxa-only-phage}
+# phage
+# significantPhageAbundanceDF.RDS is from psViralNormalizedMelt
+#   (see lines 487 - 493 in EE_Virome_Phage_Analysis_and_Figures.Rmd)
+significantPhageAbundanceDF <- readRDS("../data/RDataObjects/significantPhageAbundanceDF.RDS")
+length(unique(significantPhageAbundanceDF$ASV)) # 17 taxa
+sigPhage <- unique(significantPhageAbundanceDF$ASV)
+
+sigPhageNlAbd <- significantPhageAbundanceDF %>% 
+  filter(ASV %in% sigPhage) %>% 
+  dplyr::select(ASV, sample_name, Abundance)
+
+length(unique(sigPhageNlAbd$ASV)) # 17 taxa
+
+# make phage re-naming LUT
+# this data is written out by EE_Virome_Phage_Analysis_and_Figures.Rmd in the
+#   phage-deseq-results-plot chunk
+# this data will be used to name the phage in the correlation plots
+phageRenamingTable <- read.table("../analyses/phageRenamingTable.txt",
+                                 header = TRUE, sep = "\t")
+
+phageRenamingLUT <- phageRenamingTable %>% 
+  dplyr::select(OTU, short_phage_name) %>% 
+  mutate_if(is.factor, as.character) %>% 
+  deframe()
+
+# rename-taxa-in-sigPhageNlAbd
+sigPhageNlAbd <- sigPhageNlAbd %>% 
+  mutate("phage" = phageRenamingLUT[ASV]) %>% 
+  dplyr::select(-ASV)
+```
+
+The data frames holding the normalized abundance values for significant taxa need to be converted from long to wide format.  First, taxa need to be re-naming using the bacteria and phage renaming LUTs.  A unique_id column needs to be included so samples can be identified across the bacterial and phage data sets despite inconsistencies in sample naming.  The format can then be converted to wide andthe data frames need to be filtered down to just the samples that were analyzed and separated based on growth status prior to merging and running correlation tests.
+
+```{r get-analyzed-sample-info}
+# Only want to look at analyzed samples, read these in from all_analyzed_sample_data.txt
+allAnalyzedSamples <- read.delim("../documents/all_analyzed_sample_data.txt",
+                                 sep = "\t")
+# get unique IDs of the analyzed samples we want for the correlation plots
+allAnalyzedSamples <- allAnalyzedSamples %>% 
+  mutate_if(is.factor, as.character) %>% 
+  mutate("unique_id" = str_extract(string = sample_name,
+                                   pattern = "NA[:digit:]+"))
+
+analyzedSampleIDs <- pull(allAnalyzedSamples, unique_id) # 84 total
+
+# make a look-up-table of samples (by their unique_id) and their growth status
+#   so it can be added to the abundance data frames for later separation
+#   of correlation plots by growth status prior
+growthStatusLUT <- as.character(allAnalyzedSamples$Growth_Status_Prior)
+names(growthStatusLUT) <- allAnalyzedSamples$unique_id
+```
+
+```{r sig-abd-long-to-wide}
+# bacteria
+sigBacteriaWide <- spread(sigBacteriaNlAbd, key = "bacteria", value = "Abundance") # 81 samples
+
+sigBacteriaWideFilt <- sigBacteriaWide %>% 
+  mutate("unique_id" = str_extract(string = sample_name,
+                                   pattern = "NA[:digit:]+")) %>% 
+  filter(unique_id %in% analyzedSampleIDs) %>% 
+  dplyr::select(-sample_name) # 81 samples
+
+# phage
+sigPhageWide <- spread(sigPhageNlAbd, key = "phage", value = "Abundance")
+
+sigPhageWideFilt <- sigPhageWide %>% 
+  mutate("unique_id" = str_extract(string = sample_name,
+                                   pattern = "NA[:digit:]+")) %>% 
+  filter(unique_id %in% analyzedSampleIDs) %>% 
+  dplyr::select(-sample_name) # 83 samples
+```
+
+```{r merge-sig-abd-by-sample}
+allSigTaxaAbdDF <- merge(sigBacteriaWideFilt, sigPhageWideFilt,
+                         by = "unique_id", all = FALSE) # 80 samples
+
+# add growth status column
+allSigTaxaAbdDF <- allSigTaxaAbdDF %>% 
+  mutate("Growth_Status_Prior" = growthStatusLUT[unique_id])
+```
+
+```{r test}
+# filter by growth status
+sigTaxaAbdPoor <- allSigTaxaAbdDF %>%
+  filter(Growth_Status_Prior == "Poor") %>% 
+  dplyr::select(-Growth_Status_Prior) %>% 
+  column_to_rownames(var = "unique_id")
+
+# run correlation
+sigTaxaCorrPoor <- cor(sigTaxaAbdPoor, method = "spearman")
+
+# get rid of redundant rows/columns
+#   Remove bacteria from rows
+#   Select bacteria from columns
+sigTaxaCorrPoorReduced <- sigTaxaCorrPoor %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "row_taxa") %>% 
+  filter(row_taxa %in% phageRenamingLUT) %>% # only phage in rows
+  dplyr::select(row_taxa, unname(bacteriaRenamingLUT)) %>% # unname keeps correct bacteria names in columns
+  column_to_rownames(var = "row_taxa")
+
+corrHeatmapPoor <- pheatmap(sigTaxaCorrPoorReduced,
+                            na_col = "grey", cluster_rows = FALSE,
+                            cluster_cols = FALSE)
+```
+
+```{r correlation-functions}
+
+MakeCorrelationMatrix <- function(growthStatus) {
+  # filter abundance data by growth status
+  sigTaxaGrowthFiltered <- allSigTaxaAbdDF %>% 
+    filter(Growth_Status_Prior == growthStatus) %>% 
+    dplyr::select(-Growth_Status_Prior) %>% 
+    column_to_rownames(var = "unique_id")
+  
+  # run correlation
+  sigTaxaGrowthCorrelation <- cor(sigTaxaGrowthFiltered,
+                                  method = "spearman")
+  
+  # get rid of redundant rows/columns in correlation matrix
+  #   Remove bacteria from rows (keep phage in rows)
+  #   Select bacteria from columns (keep bactria in columns)
+  sigTaxaCorrReduced <- sigTaxaGrowthCorrelation %>%
+    as.data.frame() %>%
+    rownames_to_column(var = "row_taxa") %>%
+    filter(row_taxa %in% phageRenamingLUT) %>% # only phage in rows
+    dplyr::select(row_taxa, unname(bacteriaRenamingLUT)) %>% # unname keeps correct bacteria names in columns
+    column_to_rownames(var = "row_taxa")
+  
+  return(sigTaxaCorrReduced)
+
+}
+
+PlotCorrelationHeatmap <- function(correlationMtx) {
+  correlationHeatmap <- pheatmap(correlationMtx,
+                                 na_col = "grey", cluster_rows = FALSE,
+                                 cluster_cols = FALSE)
+}
+```
+
+```{r plot-correlations}
+correlationMatrices <- map(.x = list("Poor" = "Poor",
+                                     "Moderate" = "Moderate",
+                                     "Adequate" = "Adequate"),
+                           .f = ~ MakeCorrelationMatrix(.x))
+
+pheatmap(correlationMatrices$Adequate,
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+
+```
+
+
+
+
+ 

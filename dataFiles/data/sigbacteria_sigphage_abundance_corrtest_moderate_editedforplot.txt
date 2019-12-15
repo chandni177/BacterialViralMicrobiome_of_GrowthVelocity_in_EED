@@ -1,0 +1,18 @@
+	Bifidobacterium_NA	Bifidobacterium_ruminantium	Clostridium_III_NA	Clostridium_XlVa_NA	Helicobacter_fennelliae	Megasphaera_NA	Olsenella_NA	Prevotella_NA	Treponema_NA
+Caudovirales_Myoviridae_unclassified Myoviridae_Bacillus phage BCD7	0.119070117	0.222809094	0.067931127	-0.030251347	-0.513851353	-0.18769613	-0.086921189	-0.042252035	0.101404884
+Caudovirales_Myoviridae_unclassified Myoviridae_Psychrobacter phage pOW20-A	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Myoviridae_unclassified Myoviridae_Rhodothermus phage RM378	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Podoviridae_unclassified Podoviridae_Pelagibacter phage HTVC010P	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Podoviridae_unclassified Podoviridae_Pseudomonas phage AF	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Siphoviridae_NA_NA	-0.082119676	-0.038072941	-0.097366867	0.36669281	-0.117598184	-0.226548163	-0.099246362	-0.265843352	-0.131410298
+Caudovirales_Siphoviridae_unclassified Siphoviridae_Clostridium phage phiCD111	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Siphoviridae_unclassified Siphoviridae_Croceibacter phage P2559S	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Siphoviridae_unclassified Siphoviridae_Croceibacter phage P2559Y	-0.006972934	-0.054283097	-0.065114527	-0.085931153	0.063471421	-0.133900623	0.352908967	-0.19021224	-0.013162366
+Caudovirales_Siphoviridae_unclassified Siphoviridae_Listeria phage P40	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Caudovirales_Siphoviridae_unclassified Siphoviridae_NA	-0.131706034	-0.10622114	-0.098232711	-0.045019887	0.222289262	-0.04809714	0.020638058	-0.025770876	0.07031313
+Caudovirales_unclassified Caudovirales_NA_NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Lactococcus phage_NA_NA_NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Microviridae_Gokushovirinae_Bdellomicrovirus_Bdellovibrio virus MH2K	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Microviridae_unclassified Microviridae_Microviridae phi-CA82_NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+unclassified bacterial viruses	-0.021748637	-0.061288711	-0.273614774	0.193146188	-0.293835744	-0.00854773	0.152376514	-0.107064827	-0.23091322
+unclassified dsDNA phages_Clostridium phage phiCT19406C_NA_NA	NA	NA	NA	NA	NA	NA	NA	NA	NA

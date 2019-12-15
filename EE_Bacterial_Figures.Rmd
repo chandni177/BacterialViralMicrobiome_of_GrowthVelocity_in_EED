@@ -173,7 +173,7 @@ figure1 <- ggarrange(plot1_1,
 figure1
 ```
 
-```{r figure-1-tiff}
+```{r figure-1-tiff, eval=FALSE}
 tiff("../figures/Figure1.tiff",
      units = "in", width = 7.5, height = 6, res = 300)
 figure1
@@ -328,6 +328,46 @@ plot3_1 <- ggplot(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotate
 plot3_1
 ```
 
+```{r calculate-normalized-abundances-for-bacteria, eval=FALSE}
+#ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria
+
+# Convert modified object to deseq object to do the DESeq normalization
+deseqPhyseq2 <- phyloseq_to_deseq2(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, 
+                                   ~ Growth_Status_Prior)
+# Function to calculate geometric means prior to estimateSizeFactiors()
+gm_mean <- function(x) {
+  exp(sum(log(x[x > 0]), na.rm = TRUE) / length(x))
+}
+
+geoMeansViralFinal <- apply(counts(deseqPhyseq2), 1, gm_mean)
+
+deseqPhyseq2 <- estimateSizeFactors(deseqPhyseq2, geoMeans = geoMeansViralFinal)
+
+set.seed(27031541)
+deseqPhyseq2 <- DESeq(deseqPhyseq2, fitType = "local", test = "Wald")
+
+# replace the counts
+replace_counts = function(physeq, dds) {
+  dds_counts = counts(dds, normalized = TRUE)
+  if (!identical(taxa_names(physeq), rownames(dds_counts))) {
+    stop("OTU ids don't match")
+  }
+  otu_table(physeq) = otu_table(dds_counts, taxa_are_rows = TRUE)
+  return(physeq)
+}
+
+physeq2BacteriaNormalized <- replace_counts(physeq = ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria,
+                                            dds = deseqPhyseq2)
+
+bacteriaNormalizedMelt <- psmelt(physeq2BacteriaNormalized)
+
+setnames(bacteriaNormalizedMelt, old = "OTU", new = "ASV")
+
+saveRDS(bacteriaNormalizedMelt, 
+        "../data/RDataObjects/bacteriaNormalizedMelt.RDS")
+```
+
+
 ## Part 2 : Ground Truth Plots of all significantly differentially abundant taxa
 
 There may be a problem with the incorrect taxa getting pulled?
@@ -339,7 +379,8 @@ There may be a problem with the incorrect taxa getting pulled?
 ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>%
   select(ASV,TaxaName)
 
-abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(abundancedataframe.rlog.pregrowth, 
+abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(bacteriaNormalizedMelt,
+                                                         #abundancedataframe.rlog.pregrowth,
                                                          ASV_TaxaNames, 
                                                          by="ASV")
 

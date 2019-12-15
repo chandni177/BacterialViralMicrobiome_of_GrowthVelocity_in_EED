@@ -1,0 +1,539 @@
+---
+title: "Environmental Enteropathy: Phage/Bacterial Relationship"
+author: "Chandni Desai"
+date: "Dec 13, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r load-libraries}
+library("ggpubr")
+library("corrplot")
+library("pheatmap")
+library("tidyverse")
+
+load("../data/RDataObjects/Dec10.RData")
+```
+
+
+### Studying the Phage - Bacterial Relationship
+
+# START WITH COMPARING GENERAL BACTERIA-PHAGE RICHNESS RELATIONSHIP
+```{r compare-bacteria-phage-richness}
+## FROM VIRUS
+phage_richness_diversity <- read.table(file = "../analyses/phageRichnessAndDiversity_191209.txt", header=TRUE)
+
+phage_richness_diversity_selectedcols <- phage_richness_diversity %>%
+  select(sample_name, Observed, Shannon)
+
+## FROM BACTERIA
+# Get bacterial richness (3 growth status samples : adequate - moderate - poor)
+# ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich
+
+# Merge bacterial and phage diversity
+bacteria_phage_richnessdiversity <- merge(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
+                                          phage_richness_diversity_selectedcols,
+                                          by="sample_name")
+
+levels(bacteria_phage_richnessdiversity$EE_status_based_on_percL)
+#[1] "Moderate" "Severe" 
+
+## Naming
+bacteria_phage_richnessdiversity <- bacteria_phage_richnessdiversity %>% 
+  rename(Bacterial_Richness = Observed.x, Phage_Richness = Observed.y,
+         Bacterial_ShannonDiversity = Shannon.x, Phage_ShannonDiversity = Shannon.y)
+```
+
+```{r eval=FALSE}
+write.table(bacteria_phage_richnessdiversity, 
+            file="../analyses/bacteria_phage_richnessdiversity.txt", 
+            row.names = FALSE, sep="\t", quote = FALSE)
+```
+
+```{r plot-richness}
+# Plot Richness
+plot1 <- ggplot(bacteria_phage_richnessdiversity, 
+                aes(Bacterial_Richness, y=Phage_Richness, 
+                    color=Growth_Status_Prior)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = T) +
+  labs(y = "Phage Richness", x = "Bacterial Richness", color = "Growth Velocity")
+
+# Plot Shannon Diversity
+plot2 <- ggplot(bacteria_phage_richnessdiversity, 
+                aes(x = Bacterial_ShannonDiversity,
+                    y = Phage_ShannonDiversity, color = Growth_Status_Prior)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = T) +
+  labs(y="Phage Shannon Diversity", x="Bacterial Shannon Diversity", 
+       color="Growth Velocity")
+
+figure7 <- ggarrange(plot1, plot2, common.legend = TRUE, nrow = 2, legend = "right")
+figure7
+```
+
+```{r save-figure7, eval=FALSE}
+tiff("../figures/Figure7.tiff", units = "in", width = 7.5, height = 7,
+     res = 300)
+figure7
+dev.off()
+```
+
+```{r linear-regression-richness}
+ set.seed(25)
+
+## LINEAR REGRESSION - RICHNESS
+regression_bacterialphagerichness <- lm(Phage_Richness ~ Bacterial_Richness + 
+                                          Growth_Status_Prior, 
+                                        data = bacteria_phage_richnessdiversity)
+
+summary(regression_bacterialphagerichness)
+
+# Call:
+#lm(formula = Phage_Richness ~ Bacterial_Richness + Growth_Status_Prior, 
+#    data = bacteria_phage_richnessdiversity)
+
+#Residuals:
+#    Min      1Q  Median      3Q     Max 
+#-274.79  -89.60   -6.83   90.54  296.48
+
+#Coefficients:
+#                            Estimate Std. Error t value Pr(>|t|)    
+#(Intercept)                 169.1100    44.8102   3.774 0.000317 ***
+#Bacterial_Richness            0.9783     0.2634   3.714 0.000387 ***
+#Growth_Status_PriorModerate -79.6784    31.2972  -2.546 0.012925 *  
+#Growth_Status_PriorPoor     -52.2922    43.3855  -1.205 0.231830    
+#---
+#Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+#Residual standard error: 127.4 on 76 degrees of freedom
+#Multiple R-squared:  0.196,	Adjusted R-squared:  0.1642 
+#F-statistic: 6.175 on 3 and 76 DF,  p-value: 0.0008204
+
+## ALSO CORRELATION TEST
+cor.test(bacteria_phage_richnessdiversity$Bacterial_Richness, 
+         bacteria_phage_richnessdiversity$Phage_Richness, 
+         method = c("spearman"))
+
+#	Spearman's rank correlation rho
+
+#data:  bacteria_phage_richnessdiversity$Bacterial_Richness and bacteria_phage_richnessdiversity$Phage_Richness
+#S = 54803, p-value = 0.001125
+#alternative hypothesis: true rho is not equal to 0
+#sample estimates:
+#      rho 
+#0.3576813 
+```
+
+```{r linear-regression-diversity}
+## LINEAR REGRESSION - SHANNON DIVERSITY
+regression_bacterialphagediversity <- lm(Phage_ShannonDiversity ~ Bacterial_ShannonDiversity +
+                                           Growth_Status_Prior, 
+                                         data = bacteria_phage_richnessdiversity)
+summary(regression_bacterialphagediversity)
+
+#Call:
+#lm(formula = Phage_ShannonDiversity ~ Bacterial_ShannonDiversity + 
+#    Growth_Status_Prior, data = bacteria_phage_richnessdiversity)
+
+#Residuals:
+#    Min      1Q  Median      3Q     Max 
+#-3.4279 -0.6112  0.0638  0.7198  1.9734 
+
+#Coefficients:
+#                            Estimate Std. Error t value Pr(>|t|)   
+#(Intercept)                   1.9873     0.8196   2.425  0.01769 * 
+#Bacterial_ShannonDiversity    0.5382     0.2540   2.119  0.03737 * 
+#Growth_Status_PriorModerate  -0.8220     0.2529  -3.251  0.00172 **
+#Growth_Status_PriorPoor      -0.3006     0.3554  -0.846  0.40024   
+#---
+#Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+#Residual standard error: 1.037 on 76 degrees of freedom
+#Multiple R-squared:  0.1596,	Adjusted R-squared:  0.1265 
+#F-statistic: 4.812 on 3 and 76 DF,  p-value: 0.004025
+
+```
+
+
+# NEXT : COMPARING ABUNDANCES
+
+```{r save-sig-bactria, eval=FALSE}
+saveRDS(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames,
+        "../data/RDataObjects/significantBacterialTaxa.RDS")
+```
+
+
+```{r}
+## GET AND PREPARE DATASET
+
+## Get DESeq normalized abundances for 9 bacterial taxa found to be significantly different between samples with Adequate and Poor Growth Velocity
+## Dataframe : abundancedataframe.rlog.pregrowth_withTaxaNames
+significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames <- data.frame(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated) %>%
+  unite(TaxaName, c(Genus, Species), sep = "_", remove = FALSE)
+
+ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>% 
+  select(ASV, TaxaName)
+
+bacteriaNormalizedMelt <- readRDS("../data/RDataObjects/bacteriaNormalizedMelt.RDS")
+
+abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(bacteriaNormalizedMelt,
+                                                         #abundancedataframe.rlog.pregrowth, 
+                                                         ASV_TaxaNames, by="ASV")
+
+
+significantBacteriaNormalized_selectedcols <- abundancedataframe.rlog.pregrowth_withTaxaNames %>% 
+  dplyr::select(ASV, sample_name, Abundance, EE_status_based_on_percL, Family, 
+         TaxaName, Growth_Status_Prior, bf_at_sampling)
+
+significantBacteriaNormalized_selectedcols <- significantBacteriaNormalized_selectedcols %>% 
+  dplyr::rename(Bacterial_Taxa = ASV)
+
+## Get DESeq normalized abundances for Caudovirales and Microviridae
+## Dataframe : psVirusFinalNormalized
+# Generated in the script EE_Virome_Pre-processing.Rmd
+psVirusFinalNormalized <- readRDS("../data/RDataObjects/psViralNormalizedMelt.RDS")
+psVirusFinalNormalized <- psVirusFinalNormalized %>% 
+  rename(Viral_TaxaID = ASV)
+
+## Get DESeq normalized abundances for 17 phage taxa found to be significantly 
+#   different between samples with Adequate and Poor Growth Velocity
+# Dataframe : significantPhageAbundanceDF.RDS
+# Generated in the script EE_Virome_Phage_Analysis_andFigures.Rmd
+significantPhageAbundanceDF <- readRDS("../data/RDataObjects/significantPhageAbundanceDF.RDS")
+significantPhageAbundanceDF_selectedcols <- significantPhageAbundanceDF %>% 
+  dplyr::select(sample_name, ASV, Abundance, Rank4, Rank5, Rank6, Rank7) %>% 
+  dplyr::rename(Viral_Taxa = ASV)
+```
+
+
+```{r compare-significant-taxa-abundances}
+## COMPARE BOTH SIGNIFICANT TAXA ABUNDANCES
+sigbacteria_sigphage_abundance <- merge(significantBacteriaNormalized_selectedcols,
+                                        significantPhageAbundanceDF_selectedcols,
+                                        by="sample_name")
+
+sigbacteria_sigphage_abundance <- sigbacteria_sigphage_abundance %>% 
+  dplyr::rename(Bacterial_Abundance = Abundance.x,
+         Phage_Abundance = Abundance.y) %>% 
+  dplyr::mutate(PhageName = paste(Rank4, Rank5, Rank6, Rank7, sep = "_"))
+
+#write.table(sigbacteria_sigphage_abundance, 
+            #file = "sigbacteria_sigphage_abundance.txt", 
+            #row.names=FALSE, quote = FALSE, sep = "\t")
+nrow(sigbacteria_sigphage_abundance) # 12240
+
+# Filter out samples where both abundances are 0
+sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved <- filter(sigbacteria_sigphage_abundance,
+                                                                     Bacterial_Abundance != 0 | Phage_Abundance != 0)
+nrow(sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved) # 9319
+
+## PLOT
+ggplot(sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved, 
+       aes(x = Bacterial_Abundance, y = Phage_Abundance)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10() +
+  stat_smooth(method = "loess") +
+  labs(title = "Phage vs Bacterial Abundance", 
+       y="Phage Abundance", x="Bacterial Abundance")
+
+cor.test(sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved$Bacterial_Abundance,
+         sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved$Phage_Abundance, 
+         method = c("spearman"))
+#	Spearman's rank correlation rho
+
+#data:  sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved$Bacterial_Abundance and #sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved$Phage_Abundance
+#S = 1.0748e+12, p-value < 2.2e-16
+#alternative hypothesis: true rho is not equal to 0
+#sample estimates:
+#       rho 
+#-0.2360114 
+```
+
+```{r correlation-analysis}
+##Correlation analysis
+#Convert long  to wide format : Each sample one row, columns are bacteria and taxa abundances
+
+bacteriaUnique <- sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved %>% 
+  dplyr::select(sample_name, TaxaName, Bacterial_Abundance) %>% 
+  unique()
+
+spreadBacteria <- spread(bacteriaUnique,
+                          key = "TaxaName", value = "Bacterial_Abundance")
+
+phageUnique <- sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved %>% 
+  dplyr::select(sample_name, PhageName, Phage_Abundance) %>% 
+  unique()
+
+spreadPhage <- spread(phageUnique, key = "PhageName", value = "Phage_Abundance")
+
+sigbacteria_sigphage_abundance_persample <- merge(spreadBacteria, spreadPhage, 
+                                                  by = "sample_name")
+
+# set rownames
+sigbacteria_sigphage_abundance_persample <- sigbacteria_sigphage_abundance_persample %>% 
+  column_to_rownames(var = "sample_name")
+```
+
+```{r, eval=FALSE}
+write.table(sigbacteria_sigphage_abundance_persample, 
+            file = "../analyses/sigbacteria_sigphage_abundance_persample_Dec2019.txt", 
+            sep = "\t", quote = FALSE)
+```
+
+```{r}
+sigbacteria_sigphage_abundance_persample_namesedited <- sigbacteria_sigphage_abundance_persample
+#sigbacteria_sigphage_abundance_persample_namesedited <- read.table(file="sigbacteria_sigphage_abundance_persample_namesedited.txt", header = TRUE, row.names = 1, sep="\t")
+sigbacteria_sigphage_abundance_persample_namesedited$sample_name <- rownames(sigbacteria_sigphage_abundance_persample_namesedited)
+
+#get growth status
+growth_status_for_sample <- sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved %>% 
+  dplyr::select(sample_name, Growth_Status_Prior) %>% 
+  unique()
+
+sigbacteria_sigphage_abundance_persample_withgrowthstatus <- inner_join(sigbacteria_sigphage_abundance_persample_namesedited,
+                                                                        growth_status_for_sample, 
+                                                                        by = "sample_name")
+
+## Split by-growth samples
+sigbacteria_sigphage_abundance_persample_adequateOnly <- sigbacteria_sigphage_abundance_persample_withgrowthstatus %>%
+   subset(Growth_Status_Prior %in% c("Adequate"))
+
+sigbacteria_sigphage_abundance_persample_poorOnly <- sigbacteria_sigphage_abundance_persample_withgrowthstatus %>%
+  subset(Growth_Status_Prior %in% c("Poor"))
+
+sigbacteria_sigphage_abundance_persample_moderateOnly <- sigbacteria_sigphage_abundance_persample_withgrowthstatus %>%
+  subset(Growth_Status_Prior %in% c("Moderate"))
+
+# Remove number rowname
+row.names(sigbacteria_sigphage_abundance_persample_adequateOnly) <- NULL
+row.names(sigbacteria_sigphage_abundance_persample_poorOnly) <- NULL
+row.names(sigbacteria_sigphage_abundance_persample_moderateOnly) <- NULL
+
+# Re-assign sample names as row names
+sigbacteria_sigphage_abundance_persample_adequateOnly_forcorrmatrix <- column_to_rownames(sigbacteria_sigphage_abundance_persample_adequateOnly, var="sample_name")
+
+sigbacteria_sigphage_abundance_persample_poorOnly_forcorrmatrix <- column_to_rownames(sigbacteria_sigphage_abundance_persample_poorOnly, var="sample_name")
+
+sigbacteria_sigphage_abundance_persample_moderateOnly_forcorrmatrix <- column_to_rownames(sigbacteria_sigphage_abundance_persample_moderateOnly, var="sample_name")
+
+# Remove Growth Status column
+sigbacteria_sigphage_abundance_persample_adequateOnly_forcorrmatrix_input <- sigbacteria_sigphage_abundance_persample_adequateOnly_forcorrmatrix %>% 
+  dplyr::select(-Growth_Status_Prior)
+
+sigbacteria_sigphage_abundance_persample_poorOnly_forcorrmatrix_input <- sigbacteria_sigphage_abundance_persample_poorOnly_forcorrmatrix %>% 
+  dplyr::select(-Growth_Status_Prior)
+
+sigbacteria_sigphage_abundance_persample_moderateOnly_forcorrmatrix_input <- sigbacteria_sigphage_abundance_persample_moderateOnly_forcorrmatrix %>% 
+  dplyr::select(-Growth_Status_Prior)
+```
+
+```{r cor-test-and-plot-all, eval=FALSE}
+# replace rownames
+row.names(sigbacteria_sigphage_abundance_persample_withgrowthstatus) <- NULL
+sigbacteria_sigphage_abundance_persample_withgrowthstatus <- sigbacteria_sigphage_abundance_persample_withgrowthstatus %>% 
+  column_to_rownames(var = "sample_name") %>% 
+  dplyr::select(-Growth_Status_Prior)
+
+sigbacteria_sigphage_abundance_corrtest <- cor(sigbacteria_sigphage_abundance_persample_withgrowthstatus,
+                                               method = "spearman")
+write.table(sigbacteria_sigphage_abundance_corrtest,
+            "../analyses/correlationMtxAll.txt",
+            quote = FALSE, sep = "\t")
+
+pheatmap(sigbacteria_sigphage_abundance_corrtest, 
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+```
+
+
+```{r run-correlation-tests}
+## RUN CORRELATION TESTS AND EDIT FOR PLOT
+# ADEQUATE
+sigbacteria_sigphage_abundance_corrtest_adequate <- cor(sigbacteria_sigphage_abundance_persample_adequateOnly_forcorrmatrix_input,
+                                                        method = "spearman")
+
+write.table(sigbacteria_sigphage_abundance_corrtest_adequate, 
+            file = "../analyses/sigbacteria_sigphage_abundance_corrtest_adequate.txt",
+            sep = "\t", quote = FALSE)
+
+#sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot <- read.table(file="Dec2019/sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot.txt", header = TRUE, row.names = 1, sep='\t')
+
+#POOR
+sigbacteria_sigphage_abundance_corrtest_poor <- cor(sigbacteria_sigphage_abundance_persample_poorOnly_forcorrmatrix_input, 
+                                                    method = "spearman")
+
+write.table(sigbacteria_sigphage_abundance_corrtest_poor, 
+            file = "../analyses/sigbacteria_sigphage_abundance_corrtest_poor.txt", 
+            sep = "\t", quote = FALSE)
+
+#sigbacteria_sigphage_abundance_corrtest_poor_editedforplot <- read.table(file="Dec2019/sigbacteria_sigphage_abundance_corrtest_poor_editedforplot.txt", header = TRUE, row.names = 1, sep='\t')
+
+# MODERATE
+sigbacteria_sigphage_abundance_corrtest_moderate <- cor(sigbacteria_sigphage_abundance_persample_moderateOnly_forcorrmatrix_input,
+                                                        method = "spearman")
+write.table(sigbacteria_sigphage_abundance_corrtest_moderate, 
+            file = "../analyses//sigbacteria_sigphage_abundance_corrtest_moderate.txt", 
+            sep = "\t", quote = FALSE)
+
+#sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot <- read.table(file="Dec2019/sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot.txt", header = TRUE, row.names = 1, sep='\t')
+
+# Calculate p-values of the correlation, correct for multiple comparisons
+## AND EDIT FOR PLOT
+## ADEQUATE
+res1_adequate <- cor.mtest(sigbacteria_sigphage_abundance_persample_adequateOnly_forcorrmatrix_input, 
+                           conf.level = .95, method="spearman")
+
+# Adjust for multiple comparisons
+pAdj_adequate <- p.adjust(c(res1_adequate[[1]]), method = "BH")
+# Create matrix with new p-values
+resAdj_adequate <- matrix(pAdj_adequate, ncol = dim(res1_adequate[[1]])[1])
+
+write.table(resAdj_adequate, file = "../analyses/pvalues_for_corrtest_FDRAdjusted_adequate.txt", 
+            sep = "\t", quote = FALSE, row.names = FALSE)
+
+
+## POOR
+res1_poor <- cor.mtest(sigbacteria_sigphage_abundance_persample_poorOnly_forcorrmatrix_input, 
+                       conf.level = 0.95, method = "spearman")
+pAdj_poor <- p.adjust(c(res1_poor[[1]]), method = "BH")
+resAdj_poor <- matrix(pAdj_poor, ncol = dim(res1_poor[[1]])[1])
+write.table(resAdj_poor, file="../analyses/pvalues_for_corrtest_FDRAdjusted_poor.txt", 
+            sep = "\t", quote = FALSE, row.names = FALSE)
+
+## MODERATE
+res1_moderate <- cor.mtest(sigbacteria_sigphage_abundance_persample_moderateOnly_forcorrmatrix_input, 
+                           conf.level = 0.95, method="spearman")
+pAdj_moderate <- p.adjust(c(res1_moderate[[1]]), method = "BH")
+resAdj_moderate <- matrix(pAdj_moderate, ncol = dim(res1_moderate[[1]])[1])
+write.table(resAdj_moderate, 
+            file="../analyses/pvalues_for_corrtest_FDRAdjusted_moderate.txt", 
+            sep="\t", quote = FALSE, row.names = FALSE)
+```
+
+```{r edited-data-for-heatmap}
+## Read in edited versions
+sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot <- read.table(file="../data/sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot.txt", 
+                                                                             header = TRUE, 
+                                                                             row.names = 1, 
+                                                                             sep='\t')
+
+sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot <- read.table(file="../data/sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot.txt", 
+                                                                             header = TRUE, 
+                                                                             row.names = 1, 
+                                                                             sep='\t')
+
+sigbacteria_sigphage_abundance_corrtest_poor_editedforplot <- read.table(file="../data/sigbacteria_sigphage_abundance_corrtest_poor_editedforplot.txt", 
+                                                                         header = TRUE, 
+                                                                         row.names = 1, 
+                                                                         sep='\t')
+```
+
+```{r eval=FALSE}
+##Read in pAdj filtered versions
+sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot_pAdj05filtered <- read.table(file="sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot_pAdj05filtered.txt", header = TRUE, row.names = 1, sep='\t')
+
+sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot_pAdj05filtered <- read.table(file="sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot_pAdj05filtered.txt", header = TRUE, row.names = 1, sep='\t')
+
+sigbacteria_sigphage_abundance_corrtest_poor_editedforplot_pAdj05filtered <- read.table(file="sigbacteria_sigphage_abundance_corrtest_poor_editedforplot_pAdj05filtered.txt", header = TRUE, row.names = 1, sep='\t')
+```
+
+```{r plot-heatmaps}
+## PLOT PHEATMAP
+
+#heatmap_adequate <- 
+pheatmap(sigbacteria_sigphage_abundance_corrtest_adequate_editedforplot, 
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+#heatmap_poor <- 
+pheatmap(sigbacteria_sigphage_abundance_corrtest_poor_editedforplot,
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+#heatmap_moderate <- 
+pheatmap(sigbacteria_sigphage_abundance_corrtest_moderate_editedforplot, 
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+## READ FILE WITH ALL THREE DATASETS
+
+sigbacteria_sigphage_abundance_corrtest_ALL <- read.table(file = "../data/ALL.txt", 
+                                                          header = TRUE, 
+                                                          row.names = 1, 
+                                                          sep = '\t')
+pheatmap(sigbacteria_sigphage_abundance_corrtest_ALL, 
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+```
+
+
+
+## PAIRWISE FISHERS TEST - SHOULD BE DONE ON ALL TAXA
+
+
+```{r}
+## PAIRWISE FISHERS
+
+sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved_fisherselectedcols <- sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved %>% select(sample_name, Bacterial_Abundance, TaxaName, Phage_Abundance, PhageName)
+
+write.table(sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved_fisherselectedcols, file="sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved_fisherselectedcols.txt", sep="\t", row.names = FALSE, quote = FALSE)
+
+#Read edited file
+sigbacteria_sigphage_abundance_fisherdataframe <- read.table(file="sigbacteria_sigphage_abundance_ZeroAbundanceSamplesRemoved_fisherselectedcols_edited.txt", sep="\t", header=TRUE)
+
+PA_table <- sigbacteria_sigphage_abundance_fisherdataframe %>%
+  droplevels() %>%
+  mutate(PA = ifelse(Abundance > 0, "1", "0")) %>%
+  select(TaxaName, PA) %>%
+  table()
+  #CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE, fisher = TRUE)
+
+write.table(PA_table,file="PA_table.txt", sep="\t", quote = FALSE)
+
+## Split table into bacteria and phage tables
+PA_table_bacteria <- read.table(file="PA_table_bacteria.txt", header=TRUE, sep="\t", row.names = 1) 
+PA_table_phage <- read.table(file="PA_table_phage.txt", header=TRUE, sep="\t", row.names = 1) 
+
+## BEFORE RUNNING THE PAIRWISE TESTS
+# Create a matrix to hold results.
+results <- matrix(NA, ncol=nrow(PA_table_phage), nrow=nrow(PA_table_bacteria))
+
+# Create row and column names to use for indexing/assignment of results.
+rownames(results) <- rownames(PA_table_bacteria)
+colnames(results) <- rownames(PA_table_phage)
+
+for (i in 1:nrow(PA_table_bacteria))
+{
+    for (j in 1:nrow(PA_table_phage))
+    {
+      pairwiseMatrix <- rbind(PA_table_bacteria[i, ],
+                              PA_table_phage[j, ])
+      
+      bacName <- row.names(PA_table_bacteria[i, ])
+      phageName <- row.names(PA_table_phage[j, ])
+      
+       resultsTemp <- pairwiseMatrix %>% CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE, fisher = TRUE)
+       
+       results[bacName, phageName] <- resultsTemp$fisher.ts$p.value
+      
+      filename = paste(bacName,phageName, sep="vs")
+      
+      #write(resultsTemp, file=filename)
+      
+      #results[bacName, phageName] <- pairwiseFisher$p.value
+    }
+}
+
+# Compute adjusted p-values using all of the computed p-values, outside of loop.
+padj <- results                           # First make copy of results matrix.  
+padj[] <- p.adjust(results, method="fdr") # Trick to retain shape and attributes.
+write.table(padj,file="pAdj_pairwisefishers_CrossTable.txt", sep="\t", quote = F)
+#PA
+#TaxaName                                                          0    1
+#  Bifidobacterium                                              1389  612
+#  Bifidobacterium ruminantium                                  1609  306
+#  Caudovirales_Myoviridae_Cd119virus_unclassified Cd119virus    103  630
+#  Caudovirales_Myoviridae_Cp51virus_Bacillus virus CP51          88  747
+#  Caudovirales_Myoviridae_Muvirus_unclassified Mu-like viruses  100  621
+#  Caudovirales_Myoviridae_NA_NA                                   6 1242
+```
+

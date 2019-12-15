@@ -391,6 +391,15 @@ phageNameTable <- enframe(sigPhageNamesLUT)
 #write.table(phageNameTable, "../analyses/phageNameTable.txt",
             #row.names = FALSE, sep = "\t", quote = FALSE)
 
+# also save a table of OTUs and the short phage names for correlation plotting
+phageRenamingTable <- phageSigASVDFModified %>% 
+  select(OTU, TaxaName) %>% 
+  mutate("short_phage_name" = sigPhageNamesLUT[TaxaName])
+
+write.table(phageRenamingTable, "../analyses/phageRenamingTable.txt",
+            row.names = FALSE, sep = "\t", quote = FALSE)
+
+
 phageSigASVDFModified <- phageSigASVDFModified %>% 
   mutate("corrected_TaxaName" = sigPhageNamesLUT[TaxaName]) %>% 
   arrange(desc(log2FoldChange))
