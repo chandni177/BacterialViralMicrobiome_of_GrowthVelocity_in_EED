@@ -1,7 +1,7 @@
 ---
-title: "Untitled"
+title: "EE Significant Bacteria-Phage Correlation Heatmaps"
 author: "Rachel Rodgers"
-date: "December 14, 2019"
+date: "December 17, 2019"
 output: html_document
 ---
 
@@ -49,14 +49,14 @@ sigBacteriaNlAbd <- sigBacteriaNlAbd %>%
 # significantPhageAbundanceDF.RDS is from psViralNormalizedMelt
 #   (see lines 487 - 493 in EE_Virome_Phage_Analysis_and_Figures.Rmd)
 significantPhageAbundanceDF <- readRDS("../data/RDataObjects/significantPhageAbundanceDF.RDS")
-length(unique(significantPhageAbundanceDF$ASV)) # 17 taxa
+length(unique(significantPhageAbundanceDF$ASV)) # 13 taxa
 sigPhage <- unique(significantPhageAbundanceDF$ASV)
 
 sigPhageNlAbd <- significantPhageAbundanceDF %>% 
   filter(ASV %in% sigPhage) %>% 
   dplyr::select(ASV, sample_name, Abundance)
 
-length(unique(sigPhageNlAbd$ASV)) # 17 taxa
+length(unique(sigPhageNlAbd$ASV)) # 13 taxa
 
 # make phage re-naming LUT
 # this data is written out by EE_Virome_Phage_Analysis_and_Figures.Rmd in the
@@ -195,6 +195,11 @@ pheatmap(correlationMatrices$Adequate,
          na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
 
 
+pheatmap(correlationMatrices$Moderate,
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+pheatmap(correlationMatrices$Poor,
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
 ```
 
 

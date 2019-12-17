@@ -328,7 +328,7 @@ plot3_1 <- ggplot(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotate
 plot3_1
 ```
 
-```{r calculate-normalized-abundances-for-bacteria, eval=FALSE}
+```{r calculate-normalized-abundances-for-bacteria}
 #ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria
 
 # Convert modified object to deseq object to do the DESeq normalization
@@ -372,12 +372,12 @@ saveRDS(bacteriaNormalizedMelt,
 
 There may be a problem with the incorrect taxa getting pulled?
 
-```{r figure3p2-ground-truth-plots, fig.width=7.5, fig.height=3}
+```{r figure3p2-ground-truth-plots, fig.width=7.5, fig.height=5}
 #Normalized Abundance of Bacterial Taxa assoc with Growth Velocity prior to growth period
 
 # Add taxa name
 ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>%
-  select(ASV,TaxaName)
+  dplyr::select(ASV,TaxaName)
 
 abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(bacteriaNormalizedMelt,
                                                          #abundancedataframe.rlog.pregrowth,
@@ -392,7 +392,12 @@ plot3_2DF <- mutate(plot3_2DF,
                                                       pattern = "_",
                                                       replacement = " "))
 
-plot3_2 <- ggplot(plot3_2DF, 
+# drop the moderate samples
+plot3_2DF_NoModerate <- plot3_2DF %>% 
+  filter(Growth_Status_Prior != "Moderate") %>% 
+  droplevels()
+
+plot3_2 <- ggplot(plot3_2DF_NoModerate, 
                   aes(y = Abundance, 
                       x = Growth_Status_Prior)) +
   geom_boxplot(width = 0.5,  
@@ -410,6 +415,135 @@ plot3_2 <- ggplot(plot3_2DF,
              labeller = labeller(correctedName = label_wrap_gen(20)),
              nrow = 3)
 plot3_2
+```
+
+Plot DESeq2 ground truth plots for adequate and poor samples, faceted by breast feeding status (yes/no per taxon).
+
+```{r filter-bacterial-normalized-abd-df, eval=FALSE}
+# from plot3_2DF, filter just the adequte and poor samples
+# re-plor the normalized abundances, faceted by breast feeding status
+bactNlAbdFiltDF <- plot3_2DF %>% 
+  filter(Growth_Status_Prior %in% c("Adequate", "Poor")) %>% 
+  droplevels()
+
+# check there's still 9 ASVs
+length(unique(bactNlAbdFiltDF$ASV))
+
+# change bf_at_sampling levels so they're more understandable when plotted
+levels(bactNlAbdFiltDF$bf_at_sampling)
+bactNlAbdFiltDF$bf_at_sampling <- factor(bactNlAbdFiltDF$bf_at_sampling,
+                                         labels = c("Not Breastfed",
+                                                    "Breastfed"))
+```
+
+```{r corrected-plot-3-2, fig.width=11, fig.height=8.5, eval=FALSE}
+plot3_2_corrected <- ggplot(bactNlAbdFiltDF,
+                            aes(y = Abundance, x = bf_at_sampling)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA) +
+  geom_jitter(alpha = 0.7, width = 0.15, size = 2) +
+  scale_y_log10() +
+  ylab("Normalized Abd. (log10)") +
+  facet_wrap( ~ correctedName + Growth_Status_Prior,
+              nrow = 3,
+              labeller = labeller(correctedName = label_wrap_gen(20))) +
+  theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          strip.text = element_text(size = 8))
+plot3_2_corrected
+```
+
+For each differentially abundant bacteria, we want to know what percent of samples in the not breastfed versus breastfed category are positive for the presence of that taxo, within growth category, by taxon.
+
+```{r percent-samples-positive-for-taxa, eval=FALSE}
+sigBactAbdTable <- bactNlAbdFiltDF %>% 
+  dplyr::select(correctedName, Sample, Growth_Status_Prior, bf_at_sampling, Abundance) %>% 
+  mutate("Present" = ifelse(Abundance > 0, yes = TRUE, no = FALSE))
+
+# how many total breastfed vs non-breastfed samples are there?
+samplesByBreastfeeding <- bactNlAbdFiltDF %>% 
+  dplyr::select(sample_name, bf_at_sampling) %>% 
+  unique()
+table(samplesByBreastfeeding$bf_at_sampling) # 34 not breastfed, 10 bf
+
+# double check this looks correct
+sigBactAbdTable %>% 
+  group_by(correctedName, bf_at_sampling) %>% 
+  summarize("total_samples" = n())
+
+sigBactSummaryTable <- sigBactAbdTable %>% 
+  group_by(correctedName, bf_at_sampling, Growth_Status_Prior) %>% 
+  summarize("total_samples" = n(), "total_true" = sum(Present)) %>% 
+  mutate("percent_positive_for_taxon" = (total_true/total_samples) * 100)
+
+sigBactSummaryTableFinal <- arrange(sigBactSummaryTable,
+                                    correctedName, Growth_Status_Prior,
+                                    bf_at_sampling)
+```
+
+```{r save-summary-table, eval=FALSE}
+write.table(sigBactSummaryTableFinal, "../analyses/sigBactSummaryTableFinal.txt",
+            quote = FALSE, sep = "\t", row.names = FALSE)
+```
+
+Fisher's exact testing on Bifidobacterium NA and Megasphaera NA.
+
+```{r fishers-bifido, eval=FALSE}
+# Breastfed samples
+bifidoBreastfed <- bactNlAbdFiltDF %>% 
+  filter(correctedName == "Bifidobacterium NA",
+         Growth_Status_Prior %in% c("Adequate", "Poor"),
+         bf_at_sampling == "Breastfed") %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, 
+                       yes = "Present", no = "Absent")) %>% 
+  dplyr::select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+
+# Not Breastfed samples
+bifidoNotBreastfed <- bactNlAbdFiltDF %>% 
+  filter(correctedName == "Bifidobacterium NA",
+         Growth_Status_Prior %in% c("Adequate", "Poor"),
+         bf_at_sampling == "Not Breastfed") %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, 
+                       yes = "Present", no = "Absent")) %>% 
+  dplyr::select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+```
+
+```{r fishers-megasphaera, eval=FALSE}
+# Breastfed samples
+megaBreastfed <- bactNlAbdFiltDF %>% 
+  filter(correctedName == "Megasphaera NA",
+         Growth_Status_Prior %in% c("Adequate", "Poor"),
+         bf_at_sampling == "Breastfed") %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, 
+                       yes = "Present", no = "Absent")) %>% 
+  dplyr::select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
+
+# Not Breastfed samples
+megaNotBreastfed <- bactNlAbdFiltDF %>% 
+  filter(correctedName == "Megasphaera NA",
+         Growth_Status_Prior %in% c("Adequate", "Poor"),
+         bf_at_sampling == "Not Breastfed") %>% 
+  droplevels() %>% 
+  mutate("PA" = ifelse(Abundance > 0, 
+                       yes = "Present", no = "Absent")) %>% 
+  dplyr::select(Growth_Status_Prior, PA) %>% 
+  table() %>% 
+  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
+             fisher = TRUE)
 ```
 
 ```{r, eval=FALSE}
@@ -481,7 +615,6 @@ plot3_2 <- ggplot(subset(plot3_2DF, Genus == "Megasphaera" &
 plot3_2
 ```
 
-
 Volcano plot of significant taxa
 
 ```{r, fig.width=11, fig.height=8.5}
@@ -513,7 +646,7 @@ ggplotly(sigBacteriaVolcano)
 ```{r figure3-panel-arrange, fig.width=7, fig.height=7}
 figure3 <- ggarrange(plot3_1, plot3_2,
                      labels = c("A", "B"), 
-                     nrow=2,
+                     nrow = 2,
                      heights = c(1,2))
 figure3
 ```
@@ -600,7 +733,7 @@ dev.off()
 
 ## Supplemental Figure 2 : Correlation heatmap of significant bacteria vs phage abundances in samples from 2 growth velocities
 
-```{r fig.width=7.5, fig.height=6}
+```{r fig.width=7.5, fig.height=6, eval=FALSE}
 CombinedHeatmaps <- readRDS("../data/RDataObjects/CombinedHeatmap.RDS")
 oldHeatmapColNames <- colnames(CombinedHeatmaps)
 newHeatmapColNames <- map_chr(.x = oldHeatmapColNames,
@@ -614,7 +747,7 @@ combinedHeatmapFigure <- pheatmap(CombinedHeatmapsModified,
 
 ```
 
-```{r figure-S2-tiff}
+```{r figure-S2-tiff, eval=FALSE}
 tiff("../figures/FigureS2.tiff",
      units = "in", width = 7, height = 6, res = 300)
 combinedHeatmapFigure

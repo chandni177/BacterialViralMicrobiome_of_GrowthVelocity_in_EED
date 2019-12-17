@@ -103,8 +103,8 @@ table(sampleDataModified$EE_status_based_on_percL)
 metadata16s <- read.delim("../documents/EE_mapping_16S_v2.txt")
 dim(metadata16s) # 157 x 43
 
-colsToAdd <- select(metadata16s, 
-                    Description, Growth_Status_Prior, bf_at_sampling) # 157 samples
+colsToAdd <- dplyr::select(metadata16s,
+                            Description, Growth_Status_Prior, bf_at_sampling) # 157 samples
 
 # There are two samples in the bacterial data that we expect to not be present
 #   in viral data:
@@ -130,7 +130,8 @@ sampleDataFull <- filter(sampleDataFull,
 #     69 LNS 232 (Severe EE, final sample for patient 232)
 #     88 LNS 3 (Moderate EE, mid sample for patient 3)
 
-# The growth status for these sample 88 LNS 3 needs to be added here.
+# The growth status for the sample 88 LNS 3 needs to be added here.
+# The breastfeeding nstatus for the sample 88 LNS 3 needs to be added here.
 # The growth status for 69 LNS 232 can be excluded since it's a final sample.
 # Additionally some samples are potentially denoted as NotToBeCounted in
 #   Growth_Status_Prior because a subsequent sample for the series was missing
@@ -155,7 +156,7 @@ missingGrowthStatusSamples <- sampleDataFull %>%
 #----- Combine Info and Correct -----#
 samplesGrowthToCorrect <- rbind(growthNotCounted, missingGrowthStatusSamples)
 samplesGrowthToCorrect <- samplesGrowthToCorrect %>% 
-  select(unique_id, sample, patient_ID, stage, HAZ, Growth_Status_Prior)
+  dplyr::select(unique_id, sample, patient_ID, stage, HAZ, Growth_Status_Prior)
 
 uniqueIDsToCorrect <- unique(samplesGrowthToCorrect$patient_ID)
 
@@ -165,7 +166,7 @@ for (i in 1:length(uniqueIDsToCorrect)) {
   currentID <- uniqueIDsToCorrect[i]
   currentDF <- filter(sampleDataFull, patient_ID == currentID)
   filteredDF <- currentDF %>% 
-    select(unique_id, sample, patient_ID, stage, HAZ, Growth_Status_Prior)
+    dplyr::select(unique_id, sample, patient_ID, stage, HAZ, Growth_Status_Prior)
   uniqueIDsToCorrectDFList[[i]] <- filteredDF
   names(uniqueIDsToCorrectDFList)[i] <- currentID
 }
@@ -181,7 +182,7 @@ patient3DF["midstudy", "Growth_Status_Prior"] <- "Poor"
 patient3DF$Growth_Status_Prior <- as.character(patient3DF$Growth_Status_Prior)
 
 patient3Growth <- patient3DF %>% 
-  select(unique_id, Growth_Status_Prior) %>% 
+  dplyr::select(unique_id, Growth_Status_Prior) %>% 
   deframe()
 
 # patient 232 (midstudy)
@@ -193,7 +194,7 @@ patient232DF["midstudy", "Growth_Status_Prior"] <- "Adequate"
 patient232DF$Growth_Status_Prior <- as.character(patient232DF$Growth_Status_Prior)
 
 patient232Growth <- patient232DF %>% 
-  select(unique_id, Growth_Status_Prior) %>% 
+  dplyr::select(unique_id, Growth_Status_Prior) %>% 
   deframe()
 
 correctedGrowthStatus <- c(patient3Growth, patient232Growth)
@@ -208,6 +209,8 @@ for (i in 1:length(correctedGrowthStatus)) {
   sampleDataCorrected[currentID, "Growth_Status_Prior"] <- currentStatus
 }
 
+#----- Add bf_at_sampling value for 88 LNS 3 -----#
+sampleDataCorrected["NA0000494080", "bf_at_sampling"] <- "Yes"
 ```
 
 ```{r change-growth-status-labels}
@@ -433,9 +436,9 @@ for (i in 1:nrow(groupPositionsDF)) {
 
   smallTaxTable <- subsetTaxTable %>% 
     subset(subsetTaxTable[currentRank] == currentVirus) %>% 
-    select(taxon_id, c(currentRankIndex:ncol(.))) %>% 
+    dplyr::select(taxon_id, c(currentRankIndex:ncol(.))) %>% 
     mutate(Category = "phage") %>%  # This shouldn't happen, but just in case
-    select(taxon_id, Category, everything())
+    dplyr::select(taxon_id, Category, everything())
 
   # The full taxonomy table has Ranks 1 through 33.  The subsetted tax table may 
   #   won't have data for all 33 ranks because we are selecting taxa at lower levels.
@@ -496,7 +499,7 @@ for (i in 1:nrow(largeTaxDFModified)) {
 }
 
 largeTaxDFModified <- largeTaxDFModified %>%
-  select(taxon_id, Category, Rank0, everything())
+  dplyr::select(taxon_id, Category, Rank0, everything())
 ```
 
 ```{r largeTaxDFFinal}

@@ -187,7 +187,7 @@ phageDiversityByGrowth
 GetAbdValues <- function(myDF, growthCategory, valueCol) {
   myDF %>%  
     filter(Growth_Status_Prior == growthCategory) %>%
-    select(Growth_Status_Prior, valueCol)
+    dplyr::select(Growth_Status_Prior, valueCol)
 }
 
 growthCategories <- c("Adequate", "Moderate", "Poor")
@@ -357,7 +357,7 @@ phageSigASVDF <- deseqPhageResultsTable %>%
   filter(Significant == TRUE)
 
 # how many significant taxa were identified?
-length(unique(phageSigASVDF$OTU)) # 17
+length(unique(phageSigASVDF$OTU)) # 13
 
 phageSigASVDFModified <- phageSigASVDF %>% 
   mutate("TaxaName" = paste(Rank1, Rank2, Rank3, Rank4),
@@ -366,21 +366,17 @@ phageSigASVDFModified <- phageSigASVDF %>%
 
 # Fix taxa names by generating a long-to-short name LUT
 sigPhageNamesLong <- phageSigASVDFModified$TaxaName
-sigPhageNamesShort <- c("unclassified Caudovirales",
-                        "Siphoviridae",
-                        "unclassified Myoviridae Bacillus phage BCD7",
-                        "unclassified Siphoviridae Croceibacter phage P2559S",
+sigPhageNamesShort <- c("unclassified Myoviridae Bacillus phage BCD7",
                         "unclassified phage",
                         "unclassified Podoviridae Pseudomonas phage AF",
                         "unclassified Lactococcus phage",
-                        "unclassified Podoviridae Pelagibacter phage HTVC010P",
                         "unclassified Siphoviridae Croceibacter phage P2559Y",
-                        "Microviridae Gokushovirinae Bdellomicrovirus Bdellovibrio virus MH2K",
                         "unclassified Myoviridae Rhodothermus phage RM378",
                         "unclassified Clostridium phage phiCT19406C",
                         "unclassified Siphoviridae Clostridium phage phiCD111",
                         "unclassified Siphoviridae",
                         "unclassified Siphoviridae Listeria phage P40",
+                        "unclassified Siphoviridae Enterococcus phage phiFL4A",
                         "unclassified Myoviridae Psychrobacter phage pOW20-A",
                         "unclassified Microviridae phi-CA82")
 
@@ -393,7 +389,7 @@ phageNameTable <- enframe(sigPhageNamesLUT)
 
 # also save a table of OTUs and the short phage names for correlation plotting
 phageRenamingTable <- phageSigASVDFModified %>% 
-  select(OTU, TaxaName) %>% 
+  dplyr::select(OTU, TaxaName) %>% 
   mutate("short_phage_name" = sigPhageNamesLUT[TaxaName])
 
 write.table(phageRenamingTable, "../analyses/phageRenamingTable.txt",
@@ -426,7 +422,9 @@ pdf("../figures/Figure6.pdf",
     height = 8.5, width = 11)
 phageDESeqResultsPlotFinal
 dev.off()
+```
 
+```{r, eval=FALSE}
 tiff("../figures/Figure6.tiff", 
      units = "in", width = 7.5, height = 6, res = 300)
 phageDESeqResultsPlotFinal
@@ -435,7 +433,7 @@ dev.off()
 
 Ground truth plots of all differential phage taxa.
 
-```{r fig.width=7.5, fig.height=7}
+```{r fig.width=11, fig.height=8.5}
 phageSigASVVec <- phageSigASVDF$OTU
 
 sigPhageNormalizedAbdDF <- psViralNormalizedMelt %>% 
@@ -462,6 +460,14 @@ sigPhageNormalizedAbdDFModified <- sigPhageNormalizedAbdDFModified %>%
   filter(Growth_Status_Prior != "Moderate") %>% 
   droplevels()
 
+# update levels for breastfeeding
+levels(sigPhageNormalizedAbdDFModified$bf_at_sampling)
+sigPhageNormalizedAbdDFModified$bf_at_sampling <- factor(sigPhageNormalizedAbdDFModified$bf_at_sampling,
+                                                         labels = c("Not Breastfed",
+                                                                    "Breastfed"))
+```
+
+```{r groundTruthPlotsFacet, fig.width = 11, fig.height = 7.5}
 groundTruthPlotsFacet <- ggplot(sigPhageNormalizedAbdDFModified,
                                 aes_string(x = "Growth_Status_Prior",
                                            y = "Abundance")) +
@@ -474,7 +480,7 @@ groundTruthPlotsFacet <- ggplot(sigPhageNormalizedAbdDFModified,
              ncol = 6) +
   theme_bw() +
   theme(legend.position = "none",
-        axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
         axis.title.x = element_blank(),
         axis.text.y = element_text(size = 10),
         axis.title = element_text(size = 10),
@@ -484,10 +490,44 @@ groundTruthPlotsFacet
 
 ```{r save-phage-ground-truth, eval=FALSE}
 tiff("../figures/FigureS1.tiff", 
-     units = "in", width = 7.5, height = 7, res = 300)
+     units = "in", width = 11, height = 7.5, res = 300)
 groundTruthPlotsFacet
 dev.off()
 ```
+
+For each differentially abundant phage, we want to know what percent of samples in the not breastfed versus breastfed category are positive for the presence of that taxon, within growth category.
+
+```{r percent-samples-positive-for-taxa}
+sigPhageAbdTable <- sigPhageNormalizedAbdDFModified %>% 
+  dplyr::select(corrected_TaxaName, Sample, Growth_Status_Prior, bf_at_sampling, Abundance) %>% 
+  mutate("Present" = ifelse(Abundance > 0, yes = TRUE, no = FALSE))
+
+# how many total breastfed vs non-breastfed samples are there?
+samplesByBreastfeeding <- sigPhageAbdTable %>% 
+  dplyr::select(Sample, bf_at_sampling) %>% 
+  unique()
+table(samplesByBreastfeeding$bf_at_sampling) # 40 not breastfed, 14 bf
+
+# double check this looks correct
+sigPhageAbdTable %>% 
+  group_by(corrected_TaxaName, bf_at_sampling) %>% 
+  summarize("total_samples" = n())
+
+sigPhageSummaryTable <- sigPhageAbdTable %>% 
+  group_by(corrected_TaxaName, bf_at_sampling, Growth_Status_Prior) %>% 
+  summarize("total_samples" = n(), "total_true" = sum(Present)) %>% 
+  mutate("percent_positive_for_taxon" = (total_true/total_samples) * 100)
+
+sigPhageSummaryTableFinal <- arrange(sigPhageSummaryTable,
+                                    corrected_TaxaName, Growth_Status_Prior,
+                                    bf_at_sampling)
+```
+
+```{r save-summary-table, eval=FALSE}
+write.table(sigPhageSummaryTableFinal, "../analyses/sigPhageSummaryTableFinal.txt",
+            quote = FALSE, sep = "\t", row.names = FALSE)
+```
+
 
 ## Extract Normalized Abundances for Significant Phage from DESeq Results
 
@@ -495,6 +535,7 @@ For each significant phage detected by DESeq, extract the abundance values from 
 
 ```{r significantPhageAbundanceDF}
 significantPhageASVs <- pull(phageSigASVDFModified, "OTU")
+length(significantPhageASVs)
 significantPhageAbundanceDF <- filter(psViralNormalizedMelt,
                                       ASV %in% significantPhageASVs)
 

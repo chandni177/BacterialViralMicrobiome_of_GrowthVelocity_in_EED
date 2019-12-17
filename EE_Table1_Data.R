@@ -81,4 +81,4 @@ analyzedSamplesWithDeltas %>%
   dplyr::group_by(Growth_Status_Prior) %>% 
   dplyr::summarize("median_delta" = median(delta_HAZ),
                    "Q1_delta" = quantile(delta_HAZ, 0.25),
-                   "Q2_delta" = quantile(delta_HAZ, 0.75))
+                   "Q3_delta" = quantile(delta_HAZ, 0.75))
