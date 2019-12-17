@@ -202,6 +202,37 @@ pheatmap(correlationMatrices$Poor,
          na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
 ```
 
+Stick all the heatmaps together side-by-side:  Adequate-Moderate-Poor
+
+```{r combined-heatmaps, fig.width=11, fig.height=7.5}
+correlationMatricesArranged <- list("Adequate" = correlationMatrices$Adequate,
+                                    "Moderate" = correlationMatrices$Moderate,
+                                    "Poor" = correlationMatrices$Poor)
+
+matricesCombined <- Reduce(f = function(df1, df2) {cbind(x = df1, y = df2)},
+                           x = correlationMatricesArranged)
+
+pheatmap(matricesCombined,
+         na_col = "grey", cluster_rows = FALSE, cluster_cols = FALSE)
+
+# fix column names
+newColNames <- colnames(correlationMatrices$Adequate)
+newColNamesFinal <- rep(newColNames, 3)
+
+matricesCombinedFinal <- matricesCombined
+colnames(matricesCombinedFinal) <- newColNamesFinal
+
+finalHeatmap <- pheatmap(matricesCombinedFinal,
+                         na_col = "grey", cluster_rows = FALSE, 
+                         cluster_cols = FALSE)
+```
+
+```{r save-comined-cor-heatmap, eval=FALSE}
+pdf("../figures/FigureS2.pdf",
+    height = 8.5, width = 11)
+finalHeatmap
+dev.off()
+```
 
 
 
