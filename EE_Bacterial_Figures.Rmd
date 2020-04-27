@@ -85,8 +85,8 @@ plot1_A <- ggplot(sd,
                 color = Growth_Status_Prior)) +
   scale_color_manual(breaks = c("Adequate", "Moderate", "Poor"),
                                 values = c("Red", "Blue", "Green", "Black")) +
-  guides(shape = guide_legend(title = "EE Status"),
-         color = guide_legend(title = "Growth Status")) +
+  guides(shape = guide_legend(title = "EED Status"),
+         color = guide_legend(title = "Growth Velocity")) +
   geom_point(size = 2.5) + 
   labs(y = "Patient ID", x = "Age in months") +
   theme(axis.title = element_text(size = 10),
@@ -236,10 +236,23 @@ set.seed(2137091)
 plot2_B
 ```
 
+## For Fig 2 Panels C & D:  Subset Alpha Div DF by Initial (Timepoint 1) and Midstudy (Timepoint 2)
+
+```{r subset-alpha-div-df}
+# timepoint 1 = "initial" stage
+alphaDivT1 <- subset(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
+                     ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich$stage == "initial")
+
+# timepoint 2 = "midstudy" stage
+alphaDivT2 <- subset(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
+                     ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich$stage == "midstudy")
+```
+
 ## Figure 2 Panel C: Richness Boxplots by Growth Status
 
-```{r figure2pC-bacterial-richness}
-plot2_C <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
+```{r figure2pC-bacterial-richness - paired}
+#----- paired analysis -----#
+plot2_C_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
                   aes(x = Growth_Status_Prior, y = Observed)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
@@ -253,13 +266,57 @@ plot2_C <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.title.y = element_text(size = 10))
 set.seed(2908795)
-plot2_C
+plot2_C_paired
+```
+
+```{r plot-alpha-div-fxn}
+PlotAlphaDiv <- function(df, index, yLabel, y_min, y_max) {
+  set.seed(2908795)
+  ggplot(data = df, aes_string(x = "Growth_Status_Prior", y = index)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    ylab(yLabel) +
+    ylim(y_min, y_max) +
+    stat_compare_means(label = "p.format", method = "kruskal.test",
+                       hide.ns = TRUE, label.x.npc = 0, label.y.npc = 0.9,
+                       size = 3.5) +
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.title.y = element_text(size = 10))
+  }
+```
+
+
+```{r figure2pC-bacterial-richness - unpaired}
+#----- unpaired analysis -----#
+plot2_C_unpaired <- map(.x = list("T1" = alphaDivT1, "T2" = alphaDivT2),
+                        .f = PlotAlphaDiv,
+                        index = "Observed", yLabel = NULL,
+                        y_min = 50, y_max = 350)
+
+
+plot2_C_unpaired_arranged <- annotate_figure(ggarrange(plot2_C_unpaired$T1,
+                                                       plot2_C_unpaired$T2,
+                                                       ncol = 2),
+                                             left = text_grob("Richness", rot = 90))
+plot2_C_unpaired_arranged
+```
+
+Dunn's post-hoc test for unpaired richness:
+
+```{r richness-post-hoc}
+dunnsRichnessT1 <- dunnTest(alphaDivT1$Observed, alphaDivT1$Growth_Status_Prior)
+dunnsRichnessT1$res
+
+dunnsRichnessT2 <- dunnTest(alphaDivT2$Observed, alphaDivT2$Growth_Status_Prior)
+dunnsRichnessT2$res
 ```
 
 ## Figure 2 Panel D: Shannon Diversity Boxplots by Growth Status
 
-```{r figure2pD-bacterial-shannon-diversity}
-plot2_D <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
+```{r figure2pD-bacterial-shannon-diversity-paired}
+#----- paired analysis -----#
+plot2_D_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
                   aes(x = Growth_Status_Prior, y = Shannon)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
@@ -273,12 +330,40 @@ plot2_D <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
         axis.text.x = element_text(angle = 45, hjust = 1),
         axis.title.y = element_text(size = 10))
 set.seed(2908795)
-plot2_D
+plot2_D_paired
+```
+
+```{r figure2pD-bacterial-diversity - unpaired}
+#----- unpaired analysis -----#
+plot2_D_unpaired <- map(.x = list("T1" = alphaDivT1, "T2" = alphaDivT2),
+                        .f = PlotAlphaDiv,
+                        index = "Shannon", yLabel = NULL,
+                        y_min = 2, y_max = 5)
+
+
+plot2_D_unpaired_arranged <- annotate_figure(ggarrange(plot2_D_unpaired$T1,
+                                                       plot2_D_unpaired$T2,
+                                                       ncol = 2),
+                                             left = text_grob("Shannon Diversity",
+                                                              rot = 90))
+plot2_D_unpaired_arranged
+```
+
+Dunn's post-hoc test for unpaired diversity:
+
+```{r diversity-post-hoc}
+dunnsDiversityT1 <- dunnTest(alphaDivT1$Shannon, alphaDivT1$Growth_Status_Prior)
+dunnsDiversityT1$res
+
+dunnsDiversityT2 <- dunnTest(alphaDivT2$Shannon, alphaDivT2$Growth_Status_Prior)
+dunnsDiversityT2$res
 ```
 
 ## Figure 2 Panel E: weighted Unifrac PCoA
 
-```{r figure2p#-bacterial-pcoa-wUniFrac}
+```{r figure2pE-bacterial-pcoa-wUniFrac-paired}
+#---- paired analysis -----#
+
 # Extract eigenvalues from ordination object for easier customization of ggplot
 eigenValues <- ord.ps2.goodmoderatepoor.wuni.prior$values$Relative_eig
 
@@ -286,7 +371,7 @@ plot2_EDF <- plot_ordination(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteri
                              ord.ps2.goodmoderatepoor.wuni.prior,
                              justDF = TRUE)
 
-plot2_E <- ggplot(plot2_EDF,
+plot2_E_paired <- ggplot(plot2_EDF,
                   aes_string(x = "Axis.1", y = "Axis.2",
                              color = "Growth_Status_Prior")) +
   xlab(paste0("PCoA 1 (", round(100*eigenValues[1], digits = 1), "%)")) +
@@ -299,19 +384,77 @@ plot2_E <- ggplot(plot2_EDF,
         legend.text = element_text(size = 10),
         legend.box.margin = margin(-10, -10, -10, -10),
         axis.title = element_text(size = 10))
-plot2_E
+plot2_E_paired
+```
+
+"Unpaired" weighted UniFrac Plots
+
+```{r figure2pE-bacterial-pcoa-wUniFrac-unpaired}
+#---- unpairedpaired analysis -----#
+
+# subset physeq objects
+psObjT1 <- subset_samples(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria,
+                          stage == "initial") # 43 samples
+
+psObjT2 <- subset_samples(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria,
+                          stage == "midstudy") # 38 samples
+
+# get wUniFrac ordination, extract eigen values
+set.seed(21233406)
+ordT1 <- ordinate(psObjT1, method = "PCoA", distance = "wUniFrac")
+eigenValuesT1 <- ordT1$values$Relative_eig
+
+set.seed(51773735)
+ordT2 <- ordinate(psObjT2, method = "PCoA", distance = "wUniFrac")
+eigenValuesT2 <- ordT2$values$Relative_eig
+
+# ordination plot DFs
+plot2_E_df_T1 <- plot_ordination(psObjT1, ordT1, justDF = TRUE)
+
+plot2_E_df_T2 <- plot_ordination(psObjT2, ordT2, justDF = TRUE)
+
+# plots
+plot2_E_unpaired_T1 <- ggplot(plot2_E_df_T1,
+                  aes_string(x = "Axis.1", y = "Axis.2", color = "Growth_Status_Prior")) +
+  xlab(paste0("PCoA 1 (", round(100*eigenValuesT1[1], digits = 1), "%)")) +
+  ylab(paste0("PCoA 2 (", round(100*eigenValuesT1[2], digits = 1), "%)")) +
+  geom_point(size = 2, alpha = 0.7) +
+  #annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
+  scale_color_manual(values = c("red", "blue", "green")) +
+  theme(legend.position = "right",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        #legend.box.margin = margin(-10, -10, -10, -10),
+        axis.title = element_text(size = 10))
+plot2_E_unpaired_T1
+
+plot2_E_unpaired_T2 <- ggplot(plot2_E_df_T2,
+                  aes_string(x = "Axis.1", y = "Axis.2", color = "Growth_Status_Prior")) +
+  xlab(paste0("PCoA 1 (", round(100*eigenValuesT2[1], digits = 1), "%)")) +
+  ylab(paste0("PCoA 2 (", round(100*eigenValuesT2[2], digits = 1), "%)")) +
+  geom_point(size = 2, alpha = 0.7) +
+  #annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
+  scale_color_manual(values = c("red", "blue", "green")) +
+  theme(legend.position = "right",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        #legend.box.margin = margin(-10, -10, -10, -10),
+        axis.title = element_text(size = 10))
+plot2_E_unpaired_T2
 ```
 
 ## ARRANGE Figure 2
 
-```{r figure2-panel-arrange, fig.width=11, fig.height=8.5}
-fig2TopRow <- ggarrange(plot2_A, plot2_B, labels = c("A", "B"), ncol = 2)
+Paired
 
-fig2BottomRow <- ggarrange(plot2_C, plot2_D, plot2_E,
-                           labels = c("C", "D", "E"), ncol = 3)
+```{r figure2-panel-arrange-paired, fig.width=11, fig.height=8.5}
+fig2PairedTopRow <- ggarrange(plot2_A, plot2_B, labels = c("A", "B"), ncol = 2)
 
-figure2 <- ggarrange(fig2TopRow, fig2BottomRow, nrow = 2)
-figure2
+fig2PairedBottomRow <- ggarrange(plot2_C_paired, plot2_D_paired, plot2_E_paired,
+                                 labels = c("C", "D", "E"), ncol = 3)
+
+figure2Paired <- ggarrange(fig2PairedTopRow, fig2PairedBottomRow, nrow = 2)
+figure2Paired
 ```
 
 ```{r eval=FALSE}
@@ -327,6 +470,29 @@ figure2 <- ggarrange(plot2_1,
                      heights = c(1.1, 0.6, 0.75))
 figure2
 ```
+
+Unpaired
+
+```{r figure2-panel-arrange-unpaired, fig.width=11, fig.height=8.5}
+fig2UnpairedTopRow <- ggarrange(plot2_A, plot2_B, labels = c("A", "B"), ncol = 2)
+
+fig2UnpairedMiddleRow <- ggarrange(plot2_C_unpaired_arranged, 
+                                   plot2_D_unpaired_arranged,
+                                   ncol = 2,
+                                   labels = c("C", "D"))
+
+fig2UnpairedBottomRow <- ggarrange(plot2_E_unpaired_T1,
+                                   plot2_E_unpaired_T2,
+                                   labels = "E", ncol = 2,
+                                   common.legend = TRUE)
+
+figure2Unpaired <- ggarrange(fig2UnpairedTopRow, fig2UnpairedMiddleRow,
+                             fig2UnpairedBottomRow, nrow = 3)
+figure2Unpaired
+```
+
+
+
 
 ```{r fig-2-tiff}
 tiff("../figures/Figure2.tiff", 
