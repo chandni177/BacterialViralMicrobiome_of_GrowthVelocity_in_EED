@@ -539,7 +539,7 @@ eukFamilyGroundTruthPlotList <- pmap(.l = list(abundanceDF = eukFamilyNormalized
 eukFamilyGroundTruthPlotList
 ```
 
-## Fisher's Exact Test on Adenoviridae and Virgaviridae
+## Fisher's Exact Test on Adenoviridae, Virgaviridae, and Circoviridae
 
 Pulling counts from eukFamilyNormalizedAbdDFList
 
@@ -608,6 +608,23 @@ circoNormalizedAbd %>%
   CrossTable(prop.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
              fisher = TRUE)
 # p = 0.3
+```
+
+```{r circo-adequate-poor, eval=FALSE}
+ggplot(circoNormalizedAbd, aes_string(x = "Growth_Status_Prior", y = "Abundance")) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    scale_y_log10() +
+    ylab("Normalized Abd. (log10)") +
+    stat_compare_means(method = "wilcox.test", label = "p.format",
+                       size = 3.5) +
+    theme_pubr() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 10),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 10))
 ```
 
 # Ground Truth Plot for Most Common Picornaviridae Genus

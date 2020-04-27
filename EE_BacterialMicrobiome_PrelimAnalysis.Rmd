@@ -72,14 +72,14 @@ theme_set(theme_bw(base_size = 12,
 ```{r load-data, include=FALSE}
 ## Read in data
 # Load Phyloseq Object from Preprocessing
-ps0 <- readRDS("./data/physeqObjects/ps0.EE_bacterial_holtz.rdp.RDS")
+ps0 <- readRDS("../data/physeqObjects/ps0.EE_bacterial_holtz.rdp.RDS")
 ps0
 #phyloseq-class experiment-level object
 #otu_table()   OTU Table:         [ 3403 taxa and 157 samples ]
 #tax_table()   Taxonomy Table:    [ 3403 taxa by 7 taxonomic ranks ]
 #phy_tree()    Phylogenetic Tree: [ 3403 tips and 3401 internal nodes ]
 # Load updated mapping data
-map <- import_qiime_sample_data("./documents/EE_mapping_16S_v2.txt")
+map <- import_qiime_sample_data("../documents/EE_mapping_16S_v2.txt")
 dim(map) # 157 x 45
 # Merge ASV table with mapping data
 ps0 <- merge_phyloseq(ps0, map)
@@ -215,5 +215,11 @@ ps2 <- ps1.remove0readstaxa %>%
     Class   != "Chloroplast" &
     Phylum != "Cyanobacteria/Chloroplast"
   )
-ps2
+ps2 # 2432 x 145
 ```
+
+```{r save-ps2-for-R21-follow-up-analyses, eval=FALSE}
+# Jan 7, 2020
+saveRDS(ps2, "../data/physeqObjects/ps2.RDS")
+```
+

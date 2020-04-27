@@ -43,6 +43,13 @@ write.table(combinedData, "../documents/combinedMetadata.txt",
 
 analyzedData <- read.delim("../documents/all_analyzed_sample_data.txt")
 
+summary(analyzedData$HAZ)
+
+analyzedDataInitial <- analyzedData %>% 
+  filter(grepl("initial", sample_name, ignore.case = TRUE))
+
+summary(analyzedDataInitial$HAZ)
+
 levels(analyzedData$Growth_Status_Prior)
 analyzedData$Growth_Status_Prior <- factor(analyzedData$Growth_Status_Prior,
                                            levels = c("Poor", "Moderate", "Adequate"))
