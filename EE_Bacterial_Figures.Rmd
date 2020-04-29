@@ -30,6 +30,8 @@ library("gmodels")
 library("multcomp")
 library("tidyverse")
 
+source("./shared_R_scripts/Helper_Functions.R")
+
 theme_set(theme_bw(base_size = 14))
 ```
 
@@ -191,11 +193,11 @@ plot2_A <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.phylum,
   facet_wrap(~Growth_Status_Prior, scales = "free_x") +
   theme(axis.text.x = element_blank(),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size = 12),
+        axis.title.y = element_text(size = 10),
         strip.text = element_text(size = 10),
         legend.position = "bottom",
         legend.title = element_blank(),
-        legend.text = element_text(size = 10),
+        legend.text = element_text(size = 8),
         legend.box.margin = margin(-10, -10, -10, -10),
         legend.key.size = unit(0.5, "cm")) + 
   scale_fill_brewer(palette="Set1")
@@ -267,9 +269,15 @@ plot2_C_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.ri
         axis.title.y = element_text(size = 10))
 set.seed(2908795)
 plot2_C_paired
+
+#----- paired analysis -----#
+plot2_C_unpaired <- plot2_C_paired +
+  facet_wrap(~ stage) +
+  theme(axis.title.y = element_blank())
+plot2_C_unpaired
 ```
 
-```{r plot-alpha-div-fxn}
+```{r plot-alpha-div-fxn, eval=FALSE}
 PlotAlphaDiv <- function(df, index, yLabel, y_min, y_max) {
   set.seed(2908795)
   ggplot(data = df, aes_string(x = "Growth_Status_Prior", y = index)) +
@@ -286,8 +294,7 @@ PlotAlphaDiv <- function(df, index, yLabel, y_min, y_max) {
   }
 ```
 
-
-```{r figure2pC-bacterial-richness - unpaired}
+```{r figure2pC-bacterial-richness - unpaired, eval=FALSE}
 #----- unpaired analysis -----#
 plot2_C_unpaired <- map(.x = list("T1" = alphaDivT1, "T2" = alphaDivT2),
                         .f = PlotAlphaDiv,
@@ -331,9 +338,15 @@ plot2_D_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.ri
         axis.title.y = element_text(size = 10))
 set.seed(2908795)
 plot2_D_paired
+
+#----- unpaired analysis -----#
+plot2_D_unpaired <- plot2_D_paired +
+  facet_wrap(~ stage) +
+  theme(axis.title.y = element_blank())
+plot2_D_unpaired
 ```
 
-```{r figure2pD-bacterial-diversity - unpaired}
+```{r figure2pD-bacterial-diversity - unpaired, eval=FALSE}
 #----- unpaired analysis -----#
 plot2_D_unpaired <- map(.x = list("T1" = alphaDivT1, "T2" = alphaDivT2),
                         .f = PlotAlphaDiv,
@@ -421,11 +434,13 @@ plot2_E_unpaired_T1 <- ggplot(plot2_E_df_T1,
   geom_point(size = 2, alpha = 0.7) +
   #annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
   scale_color_manual(values = c("red", "blue", "green")) +
+  ggtitle("initial") +
   theme(legend.position = "right",
         legend.title = element_blank(),
         legend.text = element_text(size = 10),
         #legend.box.margin = margin(-10, -10, -10, -10),
-        axis.title = element_text(size = 10))
+        axis.title = element_text(size = 10),
+        plot.title = element_text(hjust = 0.5, size = 10))
 plot2_E_unpaired_T1
 
 plot2_E_unpaired_T2 <- ggplot(plot2_E_df_T2,
@@ -435,13 +450,25 @@ plot2_E_unpaired_T2 <- ggplot(plot2_E_df_T2,
   geom_point(size = 2, alpha = 0.7) +
   #annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
   scale_color_manual(values = c("red", "blue", "green")) +
+  ggtitle("midstudy") +
   theme(legend.position = "right",
         legend.title = element_blank(),
         legend.text = element_text(size = 10),
         #legend.box.margin = margin(-10, -10, -10, -10),
-        axis.title = element_text(size = 10))
+        axis.title = element_text(size = 10),
+        plot.title = element_text(hjust = 0.5, size = 10))
 plot2_E_unpaired_T2
 ```
+
+```{r get-adonis-values}
+adonisValues <- map(.x = list("T1" = psObjT1, "T2" = psObjT2),
+                    .f = RunAdonis,
+                    category = "Growth_Status_Prior",
+                    distance = "wUniFrac")
+
+adonisValues
+```
+
 
 ## ARRANGE Figure 2
 
@@ -476,18 +503,28 @@ Unpaired
 ```{r figure2-panel-arrange-unpaired, fig.width=11, fig.height=8.5}
 fig2UnpairedTopRow <- ggarrange(plot2_A, plot2_B, labels = c("A", "B"), ncol = 2)
 
-fig2UnpairedMiddleRow <- ggarrange(plot2_C_unpaired_arranged, 
-                                   plot2_D_unpaired_arranged,
+richnessAnnotated <- annotate_figure(plot2_C_unpaired,
+                                     left = text_grob("Richness", rot = 90,
+                                                      size = 10))
+
+diversityAnnotated <- annotate_figure(plot2_D_unpaired,
+                                      left = text_grob("Shannon Diversity", rot = 90,
+                                                       size = 10))
+
+fig2UnpairedMiddleRow <- ggarrange(richnessAnnotated, 
+                                   diversityAnnotated,
                                    ncol = 2,
                                    labels = c("C", "D"))
 
 fig2UnpairedBottomRow <- ggarrange(plot2_E_unpaired_T1,
                                    plot2_E_unpaired_T2,
                                    labels = "E", ncol = 2,
-                                   common.legend = TRUE)
+                                   common.legend = TRUE,
+                                   legend = "bottom")
 
 figure2Unpaired <- ggarrange(fig2UnpairedTopRow, fig2UnpairedMiddleRow,
-                             fig2UnpairedBottomRow, nrow = 3)
+                             fig2UnpairedBottomRow, nrow = 3,
+                             heights = c(0.75, 1, 0.75))
 figure2Unpaired
 ```
 
