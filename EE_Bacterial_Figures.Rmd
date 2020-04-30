@@ -10,7 +10,7 @@ output: html_document
 Code for generation of basic bacterial figures.
 
 ```{r load-data, message=FALSE}
-load("../data/RDataObjects/Jul30_BacteriaData.RData")
+load("../data/RDataObjects/Apr29.RData")
 
 # Load libraries
 library("phyloseq")
@@ -28,6 +28,7 @@ library("pheatmap")
 library("FSA")
 library("gmodels")
 library("multcomp")
+library("writexl")
 library("tidyverse")
 
 source("./shared_R_scripts/Helper_Functions.R")
@@ -99,7 +100,7 @@ set.seed(2137091)
 plot1_A
 ```
 
-## Figure 2 Panel B: perc L
+## Figure 1 Panel B: perc L
 
 ```{r figure1pB-percent-L}
 # points should be shaped to reflect their EE status
@@ -119,7 +120,7 @@ set.seed(2137091)
 plot1_B
 ```
 
-## Figure 3 Panel C: delta HAZ
+## Figure 1 Panel C: delta HAZ
 
 ```{r figure1pC-delta-HAZ}
 ## Use data from file: plottingdeltaHAZ_dataforfigure.txt (delta HAZ for all samples)
@@ -168,13 +169,13 @@ figure1
 ```
 
 ```{r figure-1-tiff, eval=FALSE}
-tiff("../figures/Figure1.tiff",
-     units = "in", width = 7.5, height = 6, res = 300)
+tiff("../figures/second_rebuttal_figures/Figure1.tiff",
+     units = "in", width = 11, height = 8.5, res = 300)
 figure1
 dev.off()
 
-pdf("../figures/Figure1.pdf",
-    height = 6, width = 7.5)
+
+pdf("../figures/second_rebuttal_figures/Figure1.pdf", width = 11, height = 8.5)
 figure1
 dev.off()
 ```
@@ -199,7 +200,10 @@ plot2_A <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.phylum,
         legend.title = element_blank(),
         legend.text = element_text(size = 8),
         legend.box.margin = margin(-10, -10, -10, -10),
-        legend.key.size = unit(0.5, "cm")) + 
+        legend.key.size = unit(0.4, "cm"),
+        legend.spacing.x = unit(0.05, "cm"),
+        panel.grid = element_blank()) +
+  #guides(fill = guide_legend(override.aes = list(size = 1))) +
   scale_fill_brewer(palette="Set1")
 plot2_A
 ```
@@ -233,7 +237,8 @@ plot2_B <- ggplot(alphaDivPS2EESamples, aes(x = age_months, y = Observed)) +
   annotate("text", x = 20, y = 325, 
            label = "paste(italic(R) ^ 2, \" = 0.346\")", parse = TRUE) +
   theme(axis.title = element_text(size = 10),
-        axis.text = element_text(size = 10))
+        axis.text = element_text(size = 10),
+        panel.grid = element_blank())
 set.seed(2137091)
 plot2_B
 ```
@@ -248,6 +253,10 @@ alphaDivT1 <- subset(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
 # timepoint 2 = "midstudy" stage
 alphaDivT2 <- subset(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
                      ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich$stage == "midstudy")
+
+# for panels C, D
+timepointLabels <- c("Growth Period 1", "Growth Period 2")
+names(timepointLabels) <- c("initial", "midstudy")
 ```
 
 ## Figure 2 Panel C: Richness Boxplots by Growth Status
@@ -266,47 +275,15 @@ plot2_C_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.ri
                      size = 3.5) +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.title.y = element_text(size = 10))
-set.seed(2908795)
-plot2_C_paired
+        axis.title.y = element_text(size = 10),
+        panel.grid = element_blank())
 
-#----- paired analysis -----#
-plot2_C_unpaired <- plot2_C_paired +
-  facet_wrap(~ stage) +
-  theme(axis.title.y = element_blank())
-plot2_C_unpaired
-```
-
-```{r plot-alpha-div-fxn, eval=FALSE}
-PlotAlphaDiv <- function(df, index, yLabel, y_min, y_max) {
-  set.seed(2908795)
-  ggplot(data = df, aes_string(x = "Growth_Status_Prior", y = index)) +
-    geom_boxplot(outlier.shape = NA) +
-    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
-    ylab(yLabel) +
-    ylim(y_min, y_max) +
-    stat_compare_means(label = "p.format", method = "kruskal.test",
-                       hide.ns = TRUE, label.x.npc = 0, label.y.npc = 0.9,
-                       size = 3.5) +
-    theme(axis.title.x = element_blank(),
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          axis.title.y = element_text(size = 10))
-  }
-```
-
-```{r figure2pC-bacterial-richness - unpaired, eval=FALSE}
 #----- unpaired analysis -----#
-plot2_C_unpaired <- map(.x = list("T1" = alphaDivT1, "T2" = alphaDivT2),
-                        .f = PlotAlphaDiv,
-                        index = "Observed", yLabel = NULL,
-                        y_min = 50, y_max = 350)
-
-
-plot2_C_unpaired_arranged <- annotate_figure(ggarrange(plot2_C_unpaired$T1,
-                                                       plot2_C_unpaired$T2,
-                                                       ncol = 2),
-                                             left = text_grob("Richness", rot = 90))
-plot2_C_unpaired_arranged
+plot2_C_unpaired <- plot2_C_paired +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
+  theme(axis.title.y = element_blank())
+set.seed(2908795)
+plot2_C_unpaired
 ```
 
 Dunn's post-hoc test for unpaired richness:
@@ -321,7 +298,7 @@ dunnsRichnessT2$res
 
 ## Figure 2 Panel D: Shannon Diversity Boxplots by Growth Status
 
-```{r figure2pD-bacterial-shannon-diversity-paired}
+```{r figure2pD-bacterial-shannon-diversity}
 #----- paired analysis -----#
 plot2_D_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich, 
                   aes(x = Growth_Status_Prior, y = Shannon)) +
@@ -335,31 +312,15 @@ plot2_D_paired <- ggplot(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.ri
                      size = 3.5) +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.title.y = element_text(size = 10))
-set.seed(2908795)
-plot2_D_paired
+        axis.title.y = element_text(size = 10),
+        panel.grid = element_blank())
 
 #----- unpaired analysis -----#
 plot2_D_unpaired <- plot2_D_paired +
-  facet_wrap(~ stage) +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
   theme(axis.title.y = element_blank())
+set.seed(2908795)
 plot2_D_unpaired
-```
-
-```{r figure2pD-bacterial-diversity - unpaired, eval=FALSE}
-#----- unpaired analysis -----#
-plot2_D_unpaired <- map(.x = list("T1" = alphaDivT1, "T2" = alphaDivT2),
-                        .f = PlotAlphaDiv,
-                        index = "Shannon", yLabel = NULL,
-                        y_min = 2, y_max = 5)
-
-
-plot2_D_unpaired_arranged <- annotate_figure(ggarrange(plot2_D_unpaired$T1,
-                                                       plot2_D_unpaired$T2,
-                                                       ncol = 2),
-                                             left = text_grob("Shannon Diversity",
-                                                              rot = 90))
-plot2_D_unpaired_arranged
 ```
 
 Dunn's post-hoc test for unpaired diversity:
@@ -372,9 +333,46 @@ dunnsDiversityT2 <- dunnTest(alphaDivT2$Shannon, alphaDivT2$Growth_Status_Prior)
 dunnsDiversityT2$res
 ```
 
+Wilcox p-values for alpha div by growth status:
+
+```{r wilcox-on-alpha-by-growth-status}
+growthCategories <- c("Adequate" = "Adequate", "Moderate" = "Moderate",
+                      "Poor" = "Poor")
+
+ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich$Growth_Status_Prior <-
+  as.character(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich$Growth_Status_Prior)
+
+
+RunWilcox <- function(df, growthCat, alphaCat) {
+  
+  initialVec <- df %>% 
+    dplyr::filter(Growth_Status_Prior == growthCat, stage == "initial") %>% 
+    dplyr::pull(!!sym(alphaCat))
+  
+  midstudyVec <- df %>% 
+    dplyr::filter(Growth_Status_Prior == growthCat, stage == "midstudy") %>% 
+    dplyr::pull(!!sym(alphaCat))
+    
+  res <- wilcox.test(initialVec, midstudyVec)
+  return(res)
+}
+
+wilcoxResultsRich <- map(.x = growthCategories,
+                         .f = RunWilcox,
+                         df = ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
+                         alphaCat = "Observed")
+wilcoxResultsRich
+
+wilcoxResultsDiv <- map(.x = growthCategories,
+                        .f = RunWilcox,
+                        df = ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria.rich,
+                        alphaCat = "Shannon")
+wilcoxResultsDiv
+```
+
 ## Figure 2 Panel E: weighted Unifrac PCoA
 
-```{r figure2pE-bacterial-pcoa-wUniFrac-paired}
+```{r figure2pE-bacterial-pcoa-wUniFrac-paired, eval=FALSE}
 #---- paired analysis -----#
 
 # Extract eigenvalues from ordination object for easier customization of ggplot
@@ -432,15 +430,16 @@ plot2_E_unpaired_T1 <- ggplot(plot2_E_df_T1,
   xlab(paste0("PCoA 1 (", round(100*eigenValuesT1[1], digits = 1), "%)")) +
   ylab(paste0("PCoA 2 (", round(100*eigenValuesT1[2], digits = 1), "%)")) +
   geom_point(size = 2, alpha = 0.7) +
-  #annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
+  annotate("text", x = -0.05, y = 0.15, label = "p = 0.348", size = 3.5) +
   scale_color_manual(values = c("red", "blue", "green")) +
-  ggtitle("initial") +
+  ggtitle("Growth Period 1") +
+  coord_fixed(sqrt(eigenValuesT1[2]/eigenValuesT1[1])) +
   theme(legend.position = "right",
         legend.title = element_blank(),
         legend.text = element_text(size = 10),
-        #legend.box.margin = margin(-10, -10, -10, -10),
         axis.title = element_text(size = 10),
-        plot.title = element_text(hjust = 0.5, size = 10))
+        plot.title = element_text(hjust = 0.5, size = 10),
+        panel.grid = element_blank())
 plot2_E_unpaired_T1
 
 plot2_E_unpaired_T2 <- ggplot(plot2_E_df_T2,
@@ -448,17 +447,20 @@ plot2_E_unpaired_T2 <- ggplot(plot2_E_df_T2,
   xlab(paste0("PCoA 1 (", round(100*eigenValuesT2[1], digits = 1), "%)")) +
   ylab(paste0("PCoA 2 (", round(100*eigenValuesT2[2], digits = 1), "%)")) +
   geom_point(size = 2, alpha = 0.7) +
-  #annotate("text", x = -0.08, y = 0.2, label = "p = 0.634", size = 3.5) +
+  annotate("text", x = -0.25, y = 0.2, label = "p = 0.639", size = 3.5) +
   scale_color_manual(values = c("red", "blue", "green")) +
-  ggtitle("midstudy") +
+  ggtitle("Growth Period 2") +
+  coord_fixed(sqrt(eigenValuesT2[2]/eigenValuesT2[1])) +
   theme(legend.position = "right",
         legend.title = element_blank(),
         legend.text = element_text(size = 10),
-        #legend.box.margin = margin(-10, -10, -10, -10),
         axis.title = element_text(size = 10),
-        plot.title = element_text(hjust = 0.5, size = 10))
+        plot.title = element_text(hjust = 0.5, size = 10),
+        panel.grid = element_blank())
 plot2_E_unpaired_T2
 ```
+
+ADONIS p-values:
 
 ```{r get-adonis-values}
 adonisValues <- map(.x = list("T1" = psObjT1, "T2" = psObjT2),
@@ -469,12 +471,11 @@ adonisValues <- map(.x = list("T1" = psObjT1, "T2" = psObjT2),
 adonisValues
 ```
 
-
 ## ARRANGE Figure 2
 
 Paired
 
-```{r figure2-panel-arrange-paired, fig.width=11, fig.height=8.5}
+```{r figure2-panel-arrange-paired, fig.width=8.5, fig.height=11, eval=FALSE}
 fig2PairedTopRow <- ggarrange(plot2_A, plot2_B, labels = c("A", "B"), ncol = 2)
 
 fig2PairedBottomRow <- ggarrange(plot2_C_paired, plot2_D_paired, plot2_E_paired,
@@ -500,7 +501,7 @@ figure2
 
 Unpaired
 
-```{r figure2-panel-arrange-unpaired, fig.width=11, fig.height=8.5}
+```{r figure2-panel-arrange-unpaired, fig.width=8.5, fig.height=11}
 fig2UnpairedTopRow <- ggarrange(plot2_A, plot2_B, labels = c("A", "B"), ncol = 2)
 
 richnessAnnotated <- annotate_figure(plot2_C_unpaired,
@@ -524,78 +525,88 @@ fig2UnpairedBottomRow <- ggarrange(plot2_E_unpaired_T1,
 
 figure2Unpaired <- ggarrange(fig2UnpairedTopRow, fig2UnpairedMiddleRow,
                              fig2UnpairedBottomRow, nrow = 3,
-                             heights = c(0.75, 1, 0.75))
+                             heights = c(0.75, 0.75, 1))
 figure2Unpaired
 ```
 
-
-
-
-```{r fig-2-tiff}
-tiff("../figures/Figure2.tiff", 
-     units = "in", width = 7.5, height = 7, res = 300)
-figure2
+```{r fig-2-tiff, eval=FALSE}
+tiff("../figures/second_rebuttal_figures/Figure2.tiff", 
+     units = "in", width = 8.5, height = 11, res = 300)
+figure2Unpaired
 dev.off()
 
-pdf("../figures/Figure2.pdf",
-    width = 7.5, height = 7)
-figure2
+pdf("../figures/second_rebuttal_figures/Figure2.pdf", width = 8.5, height = 11)
+figure2Unpaired
 dev.off()
 ```
 
+# Figure 3: DESeq Results Heatmap
 
-## FIGURE 3:  Bacterial Differential Abundance
+The DESeq model contains all three growth groups (adequate, moderate, poor).  We will generate a list of the unique differentially abundant taxa between the three pairwise comparisons: adequate vs. moderate, adequate vs. poor and moderate vs. poor, then make a heatmap displaying the significant taxa along the y-axis with adequate, moderate, and poor samples along the x (columns) and filled by mean normalized abundance.
 
-## Panel A: Differential Abundance Summary Plot with error bars
+```{r bacterial-DESeq-analysis}
+sample_data(ps2.goodmoderatepoorgrowth.priorsamplesonly.prevfiltered)$patient_ID <- as.factor(sample_data(ps2.goodmoderatepoorgrowth.priorsamplesonly.prevfiltered)$patient_ID)
 
-```{r figure3p1-bacterial-differential-abundance, fig.width=7.5, fig.height=5}
-## Dataframe with significant taxa : significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated
+dds <- phyloseq_to_deseq2(ps2.goodmoderatepoorgrowth.priorsamplesonly.prevfiltered,
+                          ~ bf_at_sampling + patient_ID + Growth_Status_Prior)
 
-significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames <-
-  data.frame(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated) %>%
-  unite(TaxaName, c(Genus, Species), sep = "_", remove = FALSE)
+ddsAnalysis <- DESeq(dds)
 
-## Calculating standard errors
-significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$stderror_lower <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$log2FoldChange - significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$lfcSE
+ddsResAP <- results(ddsAnalysis, 
+                    contrast = c("Growth_Status_Prior", "Adequate", "Poor"))
 
-significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$stderror_upper <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$log2FoldChange + significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$lfcSE
+ddsResAM <- results(ddsAnalysis,
+                    contrast = c("Growth_Status_Prior", "Adequate", "Moderate"))
 
-plot3_1 <- ggplot(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames,
-                  aes(x=log2FoldChange, y=TaxaName)) +
-  geom_point(size = 2) +
-  geom_vline(xintercept = 0, alpha = 0.5, linetype = 2) +
-  geom_errorbarh(aes(xmin = stderror_lower, 
-                     xmax = stderror_upper, 
-                     height=0.1)) +
-  labs(x = "log2 Fold Change", y = "") +
-  theme(plot.subtitle = element_text(hjust = 0.5, size = 10),
-        axis.title.x = element_text(size = 10),
-        axis.text.y = element_text(size = 10)) +
-  scale_y_discrete(limits = rev(unique(sort(significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames$TaxaName))))
-plot3_1
+ddsResMP <- results(ddsAnalysis,
+                    contrast = c("Growth_Status_Prior", "Moderate", "Poor"))
+
+deseqResultsList <- list("AP" = ddsResAP, "AM" = ddsResAM, "MP" = ddsResMP)
+
+# For each data set, generate results table using 0.05 as the significance threshold
+deseqResTableList <- pmap(.l = list(ddsResults = deseqResultsList),
+                          .f = GenerateDESeqResultsTable,
+                          physeq = ps2.goodmoderatepoorgrowth.priorsamplesonly.prevfiltered)
+
+# From the deseqResTableList, extract significant results and apply a baseMean filter of 10
+deseqSigTables <- map(.x = deseqResTableList,
+                     .f = ~ dplyr::filter(.x, Significant == TRUE & baseMean > 10))
+
+deseqSigOTUs <- map(.x = deseqSigTables,
+                    .f = ~ dplyr::select(.x, OTU))
+
+# Get all unique significant OTUs 
+allSigOTUs <- Reduce(f = function(df1, df2) {merge(x = df1, y = df2,
+                                                   by = "OTU", all = TRUE)},
+                     x = deseqSigOTUs)
+
+# Add taxonomy to allSigOTUs
+taxTable <- data.frame(as(tax_table(ps2.goodmoderatepoorgrowth.priorsamplesonly.prevfiltered),
+                          "matrix")) %>% 
+  rownames_to_column(var = "OTU")
+
+allSigOTUs <- merge(allSigOTUs, taxTable, by = "OTU", all = FALSE) 
 ```
 
-```{r calculate-normalized-abundances-for-bacteria}
-#ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria
+```{r annotations-for-heatmap}
+# row annotations (Genus Species)
+allSigOTUs <- allSigOTUs %>% 
+  dplyr::mutate("Taxon" = paste(Genus, Species),
+                "Taxon" = str_remove_all(Taxon, "_"),
+                "Taxon" = ifelse(Taxon == "NA NA",
+                                 yes = paste("unclassified", Family, sep = " "),
+                                 no = Taxon))
 
-# Convert modified object to deseq object to do the DESeq normalization
-deseqPhyseq2 <- phyloseq_to_deseq2(ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria, 
-                                   ~ Growth_Status_Prior)
-# Function to calculate geometric means prior to estimateSizeFactiors()
-gm_mean <- function(x) {
-  exp(sum(log(x[x > 0]), na.rm = TRUE) / length(x))
-}
 
-geoMeansViralFinal <- apply(counts(deseqPhyseq2), 1, gm_mean)
+rowAnno <- allSigOTUs %>% 
+  dplyr::select(OTU, Taxon) %>% 
+  column_to_rownames("OTU")
+```
 
-deseqPhyseq2 <- estimateSizeFactors(deseqPhyseq2, geoMeans = geoMeansViralFinal)
-
-set.seed(27031541)
-deseqPhyseq2 <- DESeq(deseqPhyseq2, fitType = "local", test = "Wald")
-
-# replace the counts
+```{r extract-normalized-abundance-values}
+# replace the counts in the physeq object so they're normalized like the dds object
 replace_counts = function(physeq, dds) {
-  dds_counts = counts(dds, normalized = TRUE)
+  dds_counts = DESeq2::counts(dds, normalized = TRUE)
   if (!identical(taxa_names(physeq), rownames(dds_counts))) {
     stop("OTU ids don't match")
   }
@@ -603,314 +614,65 @@ replace_counts = function(physeq, dds) {
   return(physeq)
 }
 
-physeq2BacteriaNormalized <- replace_counts(physeq = ps2.goodmoderatepoorgrowth.priorsamplesonly.bacteria,
-                                            dds = deseqPhyseq2)
+physeqBacteriaNormalized <- replace_counts(physeq = ps2.goodmoderatepoorgrowth.priorsamplesonly.prevfiltered,
+                                           dds = ddsAnalysis)
 
-bacteriaNormalizedMelt <- psmelt(physeq2BacteriaNormalized)
+bacteriaNormalizedMelt <- psmelt(physeqBacteriaNormalized)
 
-setnames(bacteriaNormalizedMelt, old = "OTU", new = "ASV")
+# filter for just the significant taxa
+bacteriaNormalizedMeltSigOTUs <- bacteriaNormalizedMelt %>% 
+  filter(OTU %in% allSigOTUs$OTU)
 
-saveRDS(bacteriaNormalizedMelt, 
-        "../data/RDataObjects/bacteriaNormalizedMelt.RDS")
+# add pseudocount
+pseudoNorm <- bacteriaNormalizedMeltSigOTUs %>% 
+  mutate(pseudo_norm = 1 + Abundance)
+
+# average normalized OTU counts across growth categories
+avgSigOTUNormCounts <- pseudoNorm %>%
+  group_by(Growth_Status_Prior, OTU) %>% 
+  summarize(avg_norm_count = log2(mean(pseudo_norm)))
+
+# pivot wider to get correct matrix form for heatmap (rows as taxa, columns as 
+#   growth categories)
+heatmapNormDF <- avgSigOTUNormCounts %>% 
+  pivot_wider(names_from = Growth_Status_Prior,
+              values_from = avg_norm_count) %>% 
+  column_to_rownames(var = "OTU")
+
+heatmapNormMtx <- as.matrix(heatmapNormDF)
+
+# Get row labels
+otuLUT <- rowAnno %>% 
+  rownames_to_column() %>% 
+  deframe()
+
+heatmapRowNames <- data.frame("OTU" = row.names(heatmapNormMtx)) %>% 
+  mutate("Taxon" = otuLUT[OTU])
+
+bacteriaHeatmap <- pheatmap(heatmapNormMtx, show_colnames = TRUE, 
+                            show_rownames = TRUE, annotation_row = rowAnno, 
+                            cluster_cols = FALSE,
+                            cluster_rows = TRUE, 
+                            labels_row = heatmapRowNames$Taxon)
 ```
 
-
-## Part 2 : Ground Truth Plots of all significantly differentially abundant taxa
-
-There may be a problem with the incorrect taxa getting pulled?
-
-```{r figure3p2-ground-truth-plots, fig.width=7.5, fig.height=5}
-#Normalized Abundance of Bacterial Taxa assoc with Growth Velocity prior to growth period
-
-# Add taxa name
-ASV_TaxaNames <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames %>%
-  dplyr::select(ASV,TaxaName)
-
-abundancedataframe.rlog.pregrowth_withTaxaNames <- merge(bacteriaNormalizedMelt,
-                                                         #abundancedataframe.rlog.pregrowth,
-                                                         ASV_TaxaNames, 
-                                                         by="ASV")
-
-plot3_2DF <- subset(abundancedataframe.rlog.pregrowth_withTaxaNames,
-                    Growth_Status_Prior %in% c("Adequate","Moderate", "Poor"))
-
-plot3_2DF <- mutate(plot3_2DF,
-                    "correctedName" = str_replace_all(string = TaxaName,
-                                                      pattern = "_",
-                                                      replacement = " "))
-
-# drop the moderate samples
-plot3_2DF_NoModerate <- plot3_2DF %>% 
-  filter(Growth_Status_Prior != "Moderate") %>% 
-  droplevels()
-
-plot3_2 <- ggplot(plot3_2DF_NoModerate, 
-                  aes(y = Abundance, 
-                      x = Growth_Status_Prior)) +
-  geom_boxplot(width = 0.5,  
-               outlier.shape = NA) +
-  geom_jitter(alpha = 0.7, width = 0.15) +
-  scale_y_log10() +
-  ylab("Normalized Abd. (log10)") +
-  theme(legend.position = "none",
-          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-          axis.title.x = element_blank(),
-          axis.text.y = element_text(size = 10),
-          axis.title = element_text(size = 10),
-          strip.text = element_text(size = 8)) +
-  facet_wrap(~ correctedName,
-             labeller = labeller(correctedName = label_wrap_gen(20)),
-             nrow = 3)
-plot3_2
-```
-
-Plot DESeq2 ground truth plots for adequate and poor samples, faceted by breast feeding status (yes/no per taxon).
-
-```{r filter-bacterial-normalized-abd-df, eval=FALSE}
-# from plot3_2DF, filter just the adequte and poor samples
-# re-plor the normalized abundances, faceted by breast feeding status
-bactNlAbdFiltDF <- plot3_2DF %>% 
-  filter(Growth_Status_Prior %in% c("Adequate", "Poor")) %>% 
-  droplevels()
-
-# check there's still 9 ASVs
-length(unique(bactNlAbdFiltDF$ASV))
-
-# change bf_at_sampling levels so they're more understandable when plotted
-levels(bactNlAbdFiltDF$bf_at_sampling)
-bactNlAbdFiltDF$bf_at_sampling <- factor(bactNlAbdFiltDF$bf_at_sampling,
-                                         labels = c("Not Breastfed",
-                                                    "Breastfed"))
-```
-
-```{r corrected-plot-3-2, fig.width=11, fig.height=8.5, eval=FALSE}
-plot3_2_corrected <- ggplot(bactNlAbdFiltDF,
-                            aes(y = Abundance, x = bf_at_sampling)) +
-  geom_boxplot(width = 0.5, outlier.shape = NA) +
-  geom_jitter(alpha = 0.7, width = 0.15, size = 2) +
-  scale_y_log10() +
-  ylab("Normalized Abd. (log10)") +
-  facet_wrap( ~ correctedName + Growth_Status_Prior,
-              nrow = 3,
-              labeller = labeller(correctedName = label_wrap_gen(20))) +
-  theme(legend.position = "none",
-          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-          axis.title.x = element_blank(),
-          axis.text.y = element_text(size = 10),
-          axis.title = element_text(size = 10),
-          strip.text = element_text(size = 8))
-plot3_2_corrected
-```
-
-For each differentially abundant bacteria, we want to know what percent of samples in the not breastfed versus breastfed category are positive for the presence of that taxo, within growth category, by taxon.
-
-```{r percent-samples-positive-for-taxa, eval=FALSE}
-sigBactAbdTable <- bactNlAbdFiltDF %>% 
-  dplyr::select(correctedName, Sample, Growth_Status_Prior, bf_at_sampling, Abundance) %>% 
-  mutate("Present" = ifelse(Abundance > 0, yes = TRUE, no = FALSE))
-
-# how many total breastfed vs non-breastfed samples are there?
-samplesByBreastfeeding <- bactNlAbdFiltDF %>% 
-  dplyr::select(sample_name, bf_at_sampling) %>% 
-  unique()
-table(samplesByBreastfeeding$bf_at_sampling) # 34 not breastfed, 10 bf
-
-# double check this looks correct
-sigBactAbdTable %>% 
-  group_by(correctedName, bf_at_sampling) %>% 
-  summarize("total_samples" = n())
-
-sigBactSummaryTable <- sigBactAbdTable %>% 
-  group_by(correctedName, bf_at_sampling, Growth_Status_Prior) %>% 
-  summarize("total_samples" = n(), "total_true" = sum(Present)) %>% 
-  mutate("percent_positive_for_taxon" = (total_true/total_samples) * 100)
-
-sigBactSummaryTableFinal <- arrange(sigBactSummaryTable,
-                                    correctedName, Growth_Status_Prior,
-                                    bf_at_sampling)
-```
-
-```{r save-summary-table, eval=FALSE}
-write.table(sigBactSummaryTableFinal, "../analyses/sigBactSummaryTableFinal.txt",
-            quote = FALSE, sep = "\t", row.names = FALSE)
-```
-
-Fisher's exact testing on Bifidobacterium NA and Megasphaera NA.
-
-```{r fishers-bifido, eval=FALSE}
-# Breastfed samples
-bifidoBreastfed <- bactNlAbdFiltDF %>% 
-  filter(correctedName == "Bifidobacterium NA",
-         Growth_Status_Prior %in% c("Adequate", "Poor"),
-         bf_at_sampling == "Breastfed") %>% 
-  droplevels() %>% 
-  mutate("PA" = ifelse(Abundance > 0, 
-                       yes = "Present", no = "Absent")) %>% 
-  dplyr::select(Growth_Status_Prior, PA) %>% 
-  table() %>% 
-  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
-             fisher = TRUE)
-
-# Not Breastfed samples
-bifidoNotBreastfed <- bactNlAbdFiltDF %>% 
-  filter(correctedName == "Bifidobacterium NA",
-         Growth_Status_Prior %in% c("Adequate", "Poor"),
-         bf_at_sampling == "Not Breastfed") %>% 
-  droplevels() %>% 
-  mutate("PA" = ifelse(Abundance > 0, 
-                       yes = "Present", no = "Absent")) %>% 
-  dplyr::select(Growth_Status_Prior, PA) %>% 
-  table() %>% 
-  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
-             fisher = TRUE)
-```
-
-```{r fishers-megasphaera, eval=FALSE}
-# Breastfed samples
-megaBreastfed <- bactNlAbdFiltDF %>% 
-  filter(correctedName == "Megasphaera NA",
-         Growth_Status_Prior %in% c("Adequate", "Poor"),
-         bf_at_sampling == "Breastfed") %>% 
-  droplevels() %>% 
-  mutate("PA" = ifelse(Abundance > 0, 
-                       yes = "Present", no = "Absent")) %>% 
-  dplyr::select(Growth_Status_Prior, PA) %>% 
-  table() %>% 
-  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
-             fisher = TRUE)
-
-# Not Breastfed samples
-megaNotBreastfed <- bactNlAbdFiltDF %>% 
-  filter(correctedName == "Megasphaera NA",
-         Growth_Status_Prior %in% c("Adequate", "Poor"),
-         bf_at_sampling == "Not Breastfed") %>% 
-  droplevels() %>% 
-  mutate("PA" = ifelse(Abundance > 0, 
-                       yes = "Present", no = "Absent")) %>% 
-  dplyr::select(Growth_Status_Prior, PA) %>% 
-  table() %>% 
-  CrossTable(propr.r = FALSE, prop.c = FALSE, prop.t = FALSE, prop.chisq = FALSE,
-             fisher = TRUE)
-```
-
-```{r, eval=FALSE}
-# do for all bacteria in the deseq results
-
-generaToPlot <- ASV_TaxaNames$ASV
-names(generaToPlot) <- ASV_TaxaNames$TaxaName
-
-PlotGroundTruthByBF <- function(genusToPlot) {
-  currentASV <- genusToPlot[[]]
-}
-
-subsetDFList <- vector(mode = "list", length = length(generaToPlot))
-
-for (i in 1:length(generaToPlot)) {
-  currentASV <- generaToPlot[[i]]
-  currentName <- names(generaToPlot)[i]
-  subsetDF <- plot3_2DF %>% 
-    filter(ASV == currentASV & Growth_Status_Prior != "Moderate")
-  subsetDFList[[i]] <- subsetDF
-  names(subsetDFList)[i] <- currentName
-}
-
-GroundTruthByBF <- function(currentDF, currentTitle) {
-  ggplot(currentDF, aes_string(y = "Abundance", x = "bf_at_sampling")) +
-    geom_boxplot(width = 0.5, outlier.shape = NA) +
-    geom_jitter(aes(size = baseMean), alpha = 0.7, width = 0.15) +
-    scale_y_log10() +
-    ylab("Normalized Abd. (log10)") +
-    ggtitle(currentTitle) +
-    theme(legend.position = "none",
-          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-          axis.title.x = element_blank(),
-          axis.text.y = element_text(size = 10),
-          axis.title = element_text(size = 10),
-          strip.text = element_text(size = 8),
-          plot.title = element_text(hjust = 0.5)) +
-  facet_wrap(~Growth_Status_Prior)
-}
-
-for (i in 1:length(subsetDFList)) {
-  currentDF <- subsetDFList[[i]]
-  currentTitle <- names(subsetDFList)[i]
-  plot(GroundTruthByBF(currentDF, currentTitle))
-}
-```
-
-```{r, eval=FALSE}
-plot3_2 <- ggplot(subset(plot3_2DF, Genus == "Megasphaera" &
-                           Growth_Status_Prior != "Moderate"), 
-                  aes(y = Abundance, 
-                      x = bf_at_sampling)) +
-  geom_boxplot(width = 0.5,  
-               outlier.shape = NA) +
-  geom_jitter(aes(size = baseMean), alpha = 0.7, 
-              width = 0.15) +
-  scale_y_log10() +
-  ylab("Normalized Abd. (log10)") +
-  theme(legend.position = "none",
-          axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-          axis.title.x = element_blank(),
-          axis.text.y = element_text(size = 10),
-          axis.title = element_text(size = 10),
-          strip.text = element_text(size = 8)) +
-  facet_wrap(~Growth_Status_Prior)
-  #facet_wrap(~ correctedName,
-             #labeller = labeller(correctedName = label_wrap_gen(20)),
-             #nrow = 3)
-plot3_2
-```
-
-Volcano plot of significant taxa
-
-```{r, fig.width=11, fig.height=8.5}
-sigTaxaGoodPoor <- significanttaxa_dataframe_goodbadpriorsamplesbacteria.annotated_withTaxaNames 
-
-sigBacteriaVolcano <- ggplot(sigTaxaGoodPoor,
-                             aes(x = log2FoldChange,
-                                 y = -log10(padj))) +
-  geom_point(aes(color = TaxaName, size = baseMean)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_hline(yintercept = -log10(0.05)) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5),
-          axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5),
-          axis.title = element_text(size = 12),
-          axis.text = element_text(size = 12),
-          legend.text = element_text(size = 12))
-
-sigBacteriaVolcano
-
-ggplotly(sigBacteriaVolcano)
-```
-
-
-
-
-## ARRANGE Panel Figure 3
-
-```{r figure3-panel-arrange, fig.width=7, fig.height=7}
-figure3 <- ggarrange(plot3_1, plot3_2,
-                     labels = c("A", "B"), 
-                     nrow = 2,
-                     heights = c(1,2))
-figure3
-```
-
-```{r fig-3-tiff, eval=FALSE}
-tiff("../figures/Figure3.tiff",
-     units = "in", width = 7, height = 7, res = 300)
-figure3
+```{r save-heatmap, eval=FALSE}
+pdf("../figures/second_rebuttal_figures/Figure3_raw.pdf",
+    width = 11, height = 8.5)
+bacteriaHeatmap
 dev.off()
+```
 
-pdf("../figures/Figure3.pdf", height = 7, width = 7)
-figure3
-dev.off()
+```{r save-deseq-results-tables, eval=FALSE}
+renamedSigTables <- deseqSigTables
+names(renamedSigTables) <- c("bacterial_Adequate-Poor",
+                             "bacterial_Adequate-Moderate",
+                             "bacterial_Moderate-Poor")
+write_xlsx(renamedSigTables,
+           path = "../data/bacterial_DESeq_Tables.xlsx")
 ```
 
 ## FIGURE 7: BACTERIA-PHAGE ASSOCIATIONS/RELATIONSHIPS
-
 
 ## Part 1 : Relationship between Bacteria and Phage Richness 
 

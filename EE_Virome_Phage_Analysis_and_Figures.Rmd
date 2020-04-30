@@ -9,10 +9,7 @@ output: html_document
 
 ```{r initiate-environment, include=FALSE}
 # Global knitr option
-knitr::opts_chunk$set(fig.width=8,
-                      fig.height=6,
-                      warning=FALSE,
-                      message=FALSE)
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
 
 # Load libraries
 library("phyloseq")
@@ -32,6 +29,8 @@ library("gmodels")
 library("tidyverse")
 
 source("./shared_R_scripts/Helper_Functions.R")
+
+theme_set(theme_bw(base_size = 14))
 
 # Load Viral Pre-processing Data
 
@@ -72,7 +71,7 @@ phageSamplesUnique <- phageSamples %>%
                                    pattern = "-[:digit:]+-LNS-?[:digit:]+-"),
          "unique_id" = str_remove_all(unique_id, pattern = "-"))
 
-saveRDS(physeqPriorAllEEPhage, "../data/physeqObjects/physeqPriorAllEEPhage.RDS")
+#saveRDS(physeqPriorAllEEPhage, "../data/physeqObjects/physeqPriorAllEEPhage.RDS")
 ```
 
 ```{r euk-phage-sample-compare, eval=FALSE}
@@ -111,18 +110,20 @@ phageCommComp <- ggplot(phageAbundanceDF,
   theme_bw() +
   theme(axis.text.x = element_blank(),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size = 12),
+        #axis.title.y = element_text(size = 12),
         strip.text = element_text(size = 10),
         legend.position = "bottom",
         legend.title = element_blank(),
-        legend.text = element_text(size = 10),
+        legend.text = element_text(size = 9),
         legend.box.margin = margin(-10, -10, -10, -10),
-        legend.key.size = unit(0.5, "cm")) +
+        legend.key.size = unit(0.4, "cm"),
+        legend.spacing.x = unit(0.05, "cm"),
+        panel.grid = element_blank()) +
   scale_fill_brewer(palette = "Set1")
-phageCommComp 
+phageCommComp
 ```
 
-### Phage Alpha and Beta Diversity Plots
+## Phage Richness Regression by Age in Months (EE Samples Only)
 
 ```{r CalculateAlphaDiversity}
 CalculateAlphaDiversity <- function(physeqObj) {
@@ -141,131 +142,228 @@ CalculateAlphaDiversity <- function(physeqObj) {
 ```{r alphaDivDFList}
 phageAlphaDiv <- CalculateAlphaDiversity(physeqPriorAllEEPhage)
 
-write.table(phageAlphaDiv, "../analyses/phageRichnessAndDiversity_191209.txt",
-            row.names = FALSE, quote = FALSE, sep = "\t")
+#write.table(phageAlphaDiv, "../analyses/phageRichnessAndDiversity_191209.txt",
+            #row.names = FALSE, quote = FALSE, sep = "\t")
 
 ```
 
-```{r phageRichnessByGrowth}
-phageRichnessByGrowth <- ggplot(phageAlphaDiv,
-                                aes(x = Growth_Status_Prior, y = Observed)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
-  ylab("Richness") +
-  stat_compare_means(label = "p.format", method = "kruskal.test", 
-                     hide.ns = TRUE, label.x.npc = 0.5,
-                     size = 3.5) +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.title.y = element_text(size = 10))
-set.seed(2908795)
-phageRichnessByGrowth
+```{r phagel-richness-regression}
+phageRichRegression <- lm(Observed ~ age_months, data = phageAlphaDiv)
+summary(phageRichRegression)
 ```
 
-```{r phageDiversityByGrowth}
-phageDiversityByGrowth <- ggplot(phageAlphaDiv, 
-                              aes(x = Growth_Status_Prior, y = Shannon)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
-  ylab("Shannon Diversity") +
-  stat_compare_means(label = "p.format", method = "kruskal.test", 
-                     hide.ns = TRUE, label.x.npc = 0.5, label.y.npc = 0.07,
-                     size = 3.5) +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.title.y = element_text(size = 10))
-
-set.seed(2908795)
-phageDiversityByGrowth
+```{r phageRichRegressionPlot}
+phageRichRegressionPlot <- ggplot(phageRichRegression,
+                                  aes(x = age_months, y = Observed)) + 
+  geom_point(size = 1.5) + 
+  stat_smooth(method = lm) +
+  labs(y="Phage Richness", x="Age in months") +
+  annotate("text", x = 20, y = 600, label = "paste(italic(R) ^ 2, \" = 0.027\")", 
+           parse = TRUE) +
+  theme(axis.title = element_text(size = 10),
+        panel.grid = element_blank())
+set.seed(2137091)
+phageRichRegressionPlot
 ```
 
-#### Dunn's Post-Hoc Test on Diversity
+Wilcox p-values for alpha div by growth status:
 
-```{r dunns-post-hoc-phage-diversity}
-GetAbdValues <- function(myDF, growthCategory, valueCol) {
-  myDF %>%  
-    filter(Growth_Status_Prior == growthCategory) %>%
-    dplyr::select(Growth_Status_Prior, valueCol)
+```{r wilcox-on-alpha-by-growth-status}
+growthCategories <- c("Adequate" = "Adequate", "Moderate" = "Moderate",
+                      "Poor" = "Poor")
+
+phageAlphaDiv$Growth_Status_Prior <- as.character(phageAlphaDiv$Growth_Status_Prior)
+
+RunWilcox <- function(df, growthCat, alphaCat) {
+  
+  initialVec <- df %>% 
+    dplyr::filter(Growth_Status_Prior == growthCat, stage == "initial") %>% 
+    dplyr::pull(!!sym(alphaCat))
+  
+  midstudyVec <- df %>% 
+    dplyr::filter(Growth_Status_Prior == growthCat, stage == "midstudy") %>% 
+    dplyr::pull(!!sym(alphaCat))
+    
+  res <- wilcox.test(initialVec, midstudyVec)
+  return(res)
 }
 
-growthCategories <- c("Adequate", "Moderate", "Poor")
+wilcoxResultsRich <- map(.x = growthCategories,
+                         .f = RunWilcox,
+                         df = phageAlphaDiv,
+                         alphaCat = "Observed")
+wilcoxResultsRich
 
-phageDivValuesList <- map(growthCategories,
-                          ~ GetAbdValues(myDF = phageAlphaDiv, 
-                                         growthCategory = .x,
-                                         valueCol = "Shannon"))
-
-phageDivDunnDF <- Reduce(f = function(df1, df2) {rbind(x = df1, y = df2)},
-                         x = phageDivValuesList)
-
-phageDunnTest <- dunnTest(Shannon ~ Growth_Status_Prior, phageDivDunnDF)
-phageDunnTest$res
+wilcoxResultsDiv <- map(.x = growthCategories,
+                        .f = RunWilcox,
+                        df = phageAlphaDiv,
+                        alphaCat = "Shannon")
+wilcoxResultsDiv
 ```
 
-adequate - moderate p-adj = 0.005
+## Phage Alpha and Beta Diversity Plots
+
+```{r labels-for-panels-C-D}
+# for panels C, D
+timepointLabels <- c("Growth Period 1", "Growth Period 2")
+names(timepointLabels) <- c("initial", "midstudy")
+```
+
+```{r unpair-timepoint1-timepoint2}
+# timepoint 1: stage = "initial"
+phageAlphaDivT1 <- filter(phageAlphaDiv, stage == "initial")
+
+# timepoint 2: stage = "midstudy"
+phageAlphaDivT2 <- filter(phageAlphaDiv, stage == "midstudy")
+```
+
+```{r PlotAlphaDiv}
+PlotAlphaDiv <- function(df, index, yLabel) {
+  set.seed(2908795)
+  ggplot(data = df, aes_string(x = "Growth_Status_Prior", y = index)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
+    ylab(yLabel) +
+    stat_compare_means(label = "p.format", method = "kruskal.test",
+                       hide.ns = TRUE, label.x.npc = 0.5,
+                       size = 3.5) +
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  }
+```
+
+```{r phageRichUnpaired}
+phageRichUnpaired <- PlotAlphaDiv(df = phageAlphaDiv,
+                                  index = "Observed",
+                                  yLabel = "Richness") +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
+  theme(panel.grid = element_blank())
+  
+set.seed(21233406)
+phageRichUnpaired
+```
+
+Dunn's post-hoc test for unpaired richness:
+
+```{r richness-post-hoc}
+dunnsRichnessT1 <- dunnTest(phageAlphaDivT1$Observed, phageAlphaDivT1$Growth_Status_Prior)
+dunnsRichnessT1$res
+
+dunnsRichnessT2 <- dunnTest(phageAlphaDivT2$Observed, phageAlphaDivT2$Growth_Status_Prior)
+dunnsRichnessT2$res
+```
+
+```{r phageDivUnpaired}
+phageDivUnpaired <- PlotAlphaDiv(df = phageAlphaDiv,
+                                 index = "Shannon",
+                                 yLabel = "Shannon Diversity") +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
+  ylim(0, 5.5) +
+  theme(panel.grid = element_blank())
+set.seed(21233406)
+phageDivUnpaired
+```
+
+```{r div-post-hoc}
+dunnsDivT1 <- dunnTest(phageAlphaDivT1$Shannon, phageAlphaDivT1$Growth_Status_Prior)
+dunnsDivT1$res
+
+dunnsDivT2 <- dunnTest(phageAlphaDivT2$Shannon, phageAlphaDivT2$Growth_Status_Prior)
+dunnsDivT2$res
+```
 
 ### Phage MDS of Bray Distances
 
-```{r mdsBrayPhage}
+```{r PlotOrdination}
+PlotOrdination <- function(df, eigenVec, plotTitle = NULL) {
+  ggplot(df, aes_string(x = "Axis.1", y = "Axis.2", color = "Growth_Status_Prior")) +
+    xlab(paste0("PCoA 1 (", round(100*eigenVec[1], digits = 1), "%)")) +
+    ylab(paste0("PCoA 2 (", round(100*eigenVec[2], digits = 1), "%)")) +
+    geom_point(size = 2, alpha = 0.7) +
+    scale_color_manual(values = c("red", "blue", "green")) +
+    ggtitle(plotTitle) +
+    coord_fixed(sqrt(eigenVec[2]/eigenVec[1])) +
+    theme(legend.position = "right",
+          legend.title = element_blank(),
+          legend.text = element_text(size = 10),
+          axis.title = element_text(size = 10),
+          plot.title = element_text(hjust = 0.5, size = 10),
+          panel.grid = element_blank())
+}
+```
+
+```{r mdsBrayUnpaired}
+physeqPriorAllEEPhageT1 <- subset_samples(physeqPriorAllEEPhage,
+                                          stage == "initial") # 1004 x 44
+physeqPriorAllEEPhageT2 <- subset_samples(physeqPriorAllEEPhage,
+                                          stage == "midstudy") # 1004 x 39
+
+brayList <- list("T1" = physeqPriorAllEEPhageT1, "T2" = physeqPriorAllEEPhageT2)
 
 set.seed(40072100)
-RunAdonis(physeqPriorAllEEPhage, distance = "bray", 
-          category = "Growth_Status_Prior") # p = 0.069
+adonisValues <- map(.x = brayList,
+                    .f = RunAdonis,
+                    distance = "bray", category = "Growth_Status_Prior")
 
 set.seed(40072100)
-ordBrayPhage <- phyloseq::ordinate(physeq = physeqPriorAllEEPhage,
-                                   method = "MDS", distance = "bray")
-class(ordBrayPhage)
-eigenValues <- ordBrayPhage$values$Relative_eig
+ordBrayValues <- map(.x = brayList,
+                     .f = phyloseq::ordinate,
+                     distance = "bray", method = "MDS")
 
-mdsBrayPhageDF <- plot_ordination(physeqPriorAllEEPhage, ordBrayPhage,
-                                  justDF = TRUE)
+eigenValuesT1 <- ordBrayValues$T1$values$Relative_eig
+eigenValuesT2 <- ordBrayValues$T2$values$Relative_eig
 
-mdsBrayPhage <- ggplot(mdsBrayPhageDF, 
-                       aes_string(x = "Axis.1", y = "Axis.2",
-                                  color = "Growth_Status_Prior")) +
-  xlab(paste0("MDS 1 (", round(100*eigenValues[1], digits = 1), "%)")) +
-  ylab(paste0("MDS 2 (", round(100*eigenValues[2], digits = 1), "%)")) +
-  geom_point(size=2, alpha = 0.7) +
-  annotate("text", x = -0.1, y = 0.3, label = "p = 0.069", size = 3.5) +
-  scale_color_manual(values = c("red", "blue", "green")) +
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.title = element_blank(),
-        legend.text = element_text(size = 10),
-        legend.box.margin = margin(-10, -10, -10, -10),
-        axis.title = element_text(size = 10))
-mdsBrayPhage
+ordinationDFs <- pmap(.l = list(physeq = brayList,
+                                ordination = ordBrayValues),
+                      .f = plot_ordination,
+                      justDF = TRUE)
+
+set.seed(40072100)
+ordinationPlotsUnpaired <- pmap(.l = list(df = ordinationDFs,
+                                          eigenVec = list("T1" = eigenValuesT1,
+                                                          "T2" = eigenValuesT2),
+                                          plotTitle = list("T1" = "Growth Period 1",
+                                                           "T2" = "Growth Period 2")),
+                                .f = PlotOrdination)
+
+ordinationPlotsUnpaired
 ```
 
 ### Arrang Phage Panel
 
-```{r, fig.width=7.5, fig.height=7}
-phagePanel <- ggarrange(phageCommComp,
-                        ggarrange(phageRichnessByGrowth, 
-                                  phageDiversityByGrowth, 
-                                  mdsBrayPhage,
-                                  labels = c("B", "C", "D"),
-                                  ncol = 3,
-                                  widths = c(0.2, 0.2, 0.3)),
-                        nrow = 2,
-                        labels = c("A"), 
-                        heights = c(1.1,0.6,0.75))
+```{r, fig.width=8.5, fig.height=11}
+fig5TopRow <- ggarrange(phageCommComp, phageRichRegressionPlot,
+                        labels = c("A", "B"), ncol = 2)
+
+fig5MiddleRow <- ggarrange(phageRichUnpaired,
+                           phageDivUnpaired,
+                           labels = c("C", "D"), ncol = 2)
+
+fig5BottomRow <- ggarrange(ordinationPlotsUnpaired$T1 +
+                             annotate("text", x = -0.3, y = 0.3, 
+                                      label = "p = 0.063", size = 3.5),
+                           ordinationPlotsUnpaired$T2 +
+                             annotate("text", x = -0.2, y = -0.3,
+                                      label = "p = 0.365", size = 3.5),
+                           labels = "E", ncol = 2,
+                           common.legend = TRUE,
+                           legend = "bottom")
+
+
+phagePanel <- ggarrange(fig5TopRow, fig5MiddleRow, fig5BottomRow, nrow = 3,
+                        heights = c(0.75, 0.75, 1))
 phagePanel
 ```
 
 Phage panel scaling
 
 ```{r phage-panel-scaling, eval=FALSE}
-pdf("../figures/Figure5.pdf",
-    height = 8.5, width = 11)
+tiff("../figures/second_rebuttal_figures/Figure5.tiff", 
+     units = "in", width = 8.5, height = 11, res = 300)
 phagePanel
 dev.off()
 
-tiff("../figures/Figure5.tiff", 
-     units = "in", width = 7.5, height = 7, res = 300)
+pdf("../figures/second_rebuttal_figures/Figure5.pdf", width = 8.5, height = 11)
 phagePanel
 dev.off()
 ```
@@ -295,64 +393,154 @@ keepPhageDESeq <- phagePrevDF %>%
   pull(taxon) # 934 keepers
 
 physeqPhageFilt <- prune_taxa(keepPhageDESeq, physeqPriorAllEEPhage)
-physeqPhageFilt # 934 x 87
+physeqPhageFilt # 934 x 83
 
 any(sample_sums(physeqPhageFilt) == 0) # FALSE
 
 #----- Remove Moderate Samples -----#
-physeqPhageNoModerate <- physeqPhageFilt %>% 
-  subset_samples(Growth_Status_Prior != "Moderate") %>% 
-  RemoveMissingTaxa()
-physeqPhageNoModerate # 915 x 47
+#physeqPhageNoModerate <- physeqPhageFilt %>% 
+  #subset_samples(Growth_Status_Prior != "Moderate") %>% 
+  #RemoveMissingTaxa()
+#physeqPhageNoModerate # 915 x 46
 
 #----- How Many Samples in Each Growth Category? -----#
-sampleDataPhageDESeq <- as(sample_data(physeqPhageNoModerate), "data.frame")
-sampleDataPhageDESeq %>% 
-  group_by(Growth_Status_Prior) %>% 
-  summarize(count = n())
+#sampleDataPhageDESeq <- as(sample_data(physeqPhageNoModerate), "data.frame")
+#sampleDataPhageDESeq %>% 
+  #group_by(Growth_Status_Prior) %>% 
+  #summarize(count = n())
 
 #----- DESeq2 Analysis -----#
 # replace any missing values within bf_at_sampling with "unknown"
-sample_data(physeqPhageNoModerate)$bf_at_sampling <- as.character(sample_data(physeqPhageNoModerate)$bf_at_sampling)
+sample_data(physeqPhageFilt)$bf_at_sampling <- as.character(sample_data(physeqPhageFilt)$bf_at_sampling)
+sample_data(physeqPhageFilt)$bf_at_sampling[is.na(sample_data(physeqPhageFilt)$bf_at_sampling)] <- "unknown"
+# make class of patient_ID factor instead of numeric
+sample_data(physeqPhageFilt)$patient_ID <- as.factor(sample_data(physeqPhageFilt)$patient_ID)
 
-sample_data(physeqPhageNoModerate)$bf_at_sampling[is.na(sample_data(physeqPhageNoModerate)$bf_at_sampling)] <- "unknown"
+dds <- phyloseq_to_deseq2(physeqPhageFilt,
+                          design = ~ bf_at_sampling + patient_ID + Growth_Status_Prior)
 
-ddsPhage <- phyloseq_to_deseq2(physeqPhageNoModerate,
-                               design = ~ bf_at_sampling + Growth_Status_Prior)
-set.seed(47544091)
-ddsPhageAnalysis <- DESeq(ddsPhage, test = "Wald", fitType = "local", betaPrior = FALSE)
-ddsPhageResults <- results(ddsPhageAnalysis,
-                           contrast = c(variable = "Growth_Status_Prior",
-                                        numerator = "Poor",
-                                        denominator = "Adequate"))
-deseqPhageResultsTable <- GenerateDESeqResultsTable(physeq = physeqPhageNoModerate,
-                                                    ddsResults = ddsPhageResults)
+ddsAnalysis <- DESeq(dds)
 
-phageVolcano <- ggplot(deseqPhageResultsTable,
-                  aes(x = log2FoldChange,
-                      y = -log10(padj),
-                      label1 = Rank1,
-                      label2 = Rank2,
-                      label3 = Rank3)) +
-    geom_point(data = subset(deseqPhageResultsTable,
-                             deseqPhageResultsTable$Significant == FALSE),
-               color = "grey") +
-    geom_point(data = subset(deseqPhageResultsTable,
-                             deseqPhageResultsTable$Significant == TRUE),
-               aes(color = Rank1, size = baseMean)) +
-    geom_vline(xintercept = 0, lty = 2) +
-    geom_hline(yintercept = -log10(0.05)) +
-    ggtitle("Phage DESeq2 Results Adequate vs Poor Growth Status") +
-    theme_bw() +
-    theme(plot.title = element_text(hjust = 0.5),
-          axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0.5),
-          axis.title = element_text(size = 12),
-          axis.text = element_text(size = 12),
-          legend.text = element_text(size = 12))
-phageVolcano
+#----- DESeq2 Results -----#
+ddsResAP <- results(ddsAnalysis, 
+                    contrast = c("Growth_Status_Prior", "Adequate", "Poor"))
+ddsResAM <- results(ddsAnalysis,
+                    contrast = c("Growth_Status_Prior", "Adequate", "Moderate"))
+ddsResMP <- results(ddsAnalysis,
+                    contrast = c("Growth_Status_Prior", "Moderate", "Poor"))
+
+deseqResultsList <- list("AP" = ddsResAP, "AM" = ddsResAM, "MP" = ddsResMP)
+
+# For each data set, generate results table using 0.1 as the significance threshold
+deseqResTableList <- pmap(.l = list(ddsResults = deseqResultsList),
+                          .f = GenerateDESeqResultsTable,
+                          physeq = physeqPhageFilt,
+                          sigThreshold = 0.1)
+
+#----- Extract, Merge Significant Taxa -----#
+# From the deseqResTableList, extract significant results
+deseqSigTables <- map(.x = deseqResTableList,
+                     .f = ~ dplyr::filter(.x, Significant == TRUE))
+
+deseqSigOTUs <- map(.x = deseqSigTables, .f = ~ dplyr::select(.x, OTU))
+
+# Get all unique significant OTUs 
+allSigOTUs <- Reduce(f = function(df1, df2) {merge(x = df1, y = df2,
+                                                   by = "OTU", all = TRUE)},
+                     x = deseqSigOTUs)
+
+# Add taxonomy to allSigOTUs
+taxTable <- data.frame(as(tax_table(physeqPhageFilt), "matrix")) %>% 
+  rownames_to_column(var = "OTU")
+
+allSigOTUs <- merge(allSigOTUs, taxTable, by = "OTU", all = FALSE)
 ```
 
-```{r phage-deseq-results-plot, fig.width=7.5, fig.height=6}
+```{r annotations-for-heatmap, eval=FALSE}
+# row annotations (rank 1 and 3)
+allSigOTUs <- allSigOTUs %>% 
+  dplyr::mutate("Taxon" = paste(Rank1, Rank3))
+
+rowAnno <- allSigOTUs %>% 
+  dplyr::select(OTU, Taxon) %>% 
+  column_to_rownames("OTU")
+```
+
+```{r extract-normalized-abundance-values}
+# replace the counts in the physeq object so they're normalized like the dds object
+replace_counts = function(physeq, dds) {
+  dds_counts = DESeq2::counts(dds, normalized = TRUE)
+  if (!identical(taxa_names(physeq), rownames(dds_counts))) {
+    stop("OTU ids don't match")
+  }
+  otu_table(physeq) = otu_table(dds_counts, taxa_are_rows = TRUE)
+  return(physeq)
+}
+
+physeqPhageFiltNormalized <- replace_counts(physeq = physeqPhageFilt,
+                                            dds = ddsAnalysis)
+
+phageNormalizedMelt <- psmelt(physeqPhageFiltNormalized)
+
+# filter for just the significant taxa
+phageNormalizedMeltSigOTUs <- phageNormalizedMelt %>% 
+  filter(OTU %in% allSigOTUs$OTU)
+
+# add pseudocount
+pseudoNorm <- phageNormalizedMeltSigOTUs %>% 
+  mutate(pseudo_norm = 1 + Abundance)
+
+# average normalized OTU counts across growth categories
+avgSigOTUNormCounts <- pseudoNorm %>%
+  group_by(Growth_Status_Prior, OTU) %>% 
+  summarize(avg_norm_count = log2(mean(pseudo_norm)))
+
+# pivot wider to get correct matrix form for heatmap (rows as taxa, columns as 
+#   growth categories)
+heatmapNormDF <- avgSigOTUNormCounts %>% 
+  pivot_wider(names_from = Growth_Status_Prior,
+              values_from = avg_norm_count) %>% 
+  column_to_rownames(var = "OTU")
+
+heatmapNormMtx <- as.matrix(heatmapNormDF)
+
+# Get row labels
+otuLUT <- rowAnno %>% 
+  rownames_to_column() %>% 
+  deframe()
+
+heatmapRowNames <- data.frame("OTU" = row.names(heatmapNormMtx)) %>% 
+  mutate("Taxon" = otuLUT[OTU])
+
+phageHeatmap <- pheatmap(heatmapNormMtx, show_colnames = TRUE,
+                         show_rownames = TRUE,
+                         annotation_row = rowAnno,
+                         cluster_cols = FALSE,
+                         cluster_rows = TRUE,
+                         labels_row = heatmapRowNames$Taxon,
+                         cellwidth = 100,
+                         cellheight = 100)
+```
+
+```{r save-deseq-results-tables, eval=FALSE}
+renamedSigTables <- deseqSigTables
+names(renamedSigTables) <- c("phage_Adequate-Poor",
+                             "phage_Adequate-Moderate",
+                             "phage_Moderate-Poor")
+write_xlsx(renamedSigTables,
+           path = "../data/phage_DESeq_Tables.xlsx")
+```
+
+```{r save-heatmap, eval=FALSE}
+pdf("../figures/second_rebuttal_figures/Figure6_raw.pdf",
+    width = 11, height = 6)
+phageHeatmap
+dev.off()
+```
+
+# Removed (Related to Old DESeq Analyses)
+
+```{r phage-deseq-results-plot, fig.width=7.5, fig.height=6, eval=FALSE}
 phageSigASVDF <- deseqPhageResultsTable %>% 
   filter(Significant == TRUE)
 
@@ -422,9 +610,7 @@ pdf("../figures/Figure6.pdf",
     height = 8.5, width = 11)
 phageDESeqResultsPlotFinal
 dev.off()
-```
 
-```{r, eval=FALSE}
 tiff("../figures/Figure6.tiff", 
      units = "in", width = 7.5, height = 6, res = 300)
 phageDESeqResultsPlotFinal
@@ -433,7 +619,7 @@ dev.off()
 
 Ground truth plots of all differential phage taxa.
 
-```{r fig.width=11, fig.height=8.5}
+```{r fig.width=11, fig.height=8.5, eval=FALSE}
 phageSigASVVec <- phageSigASVDF$OTU
 
 sigPhageNormalizedAbdDF <- psViralNormalizedMelt %>% 
@@ -467,14 +653,13 @@ sigPhageNormalizedAbdDFModified$bf_at_sampling <- factor(sigPhageNormalizedAbdDF
                                                                     "Breastfed"))
 ```
 
-```{r groundTruthPlotsFacet, fig.width = 11, fig.height = 7.5}
+```{r groundTruthPlotsFacet, fig.width = 11, fig.height = 7.5, eval=FALSE}
 groundTruthPlotsFacet <- ggplot(sigPhageNormalizedAbdDFModified,
                                 aes_string(x = "Growth_Status_Prior",
                                            y = "Abundance")) +
   geom_boxplot(width = 0.5, outlier.shape = NA) +
   geom_jitter(alpha = 0.7, width = 0.15, size = 1.5) +
   scale_y_log10() +
-  ylab("Normalized Abd. (log10)") +
   facet_wrap(~ corrected_TaxaName,
              labeller = labeller(corrected_TaxaName = label_wrap_gen(10)),
              ncol = 6) +
@@ -488,16 +673,36 @@ groundTruthPlotsFacet <- ggplot(sigPhageNormalizedAbdDFModified,
 groundTruthPlotsFacet
 ```
 
+```{r select-sipho-for-assembly, eval=FALSE}
+microviridaeAbdDF <- sigPhageNormalizedAbdDFModified %>% 
+  filter(corrected_TaxaName == "unclassified Microviridae phi-CA82") %>% 
+  arrange(desc(Abundance))
+
+# does any sample have all the phage in it?
+collapsedAbdDF <- sigPhageNormalizedAbdDFModified %>% 
+  select(Sample, Abundance, corrected_TaxaName) %>%
+  filter(Abundance > 0) %>% 
+  unique() %>% 
+  mutate_if(is.factor, as.character)
+
+test <- collapsedAbdDF %>% group_by(Sample) %>% summarise(n_distinct(corrected_TaxaName))
+```
+
 ```{r save-phage-ground-truth, eval=FALSE}
 tiff("../figures/FigureS1.tiff", 
      units = "in", width = 11, height = 7.5, res = 300)
+groundTruthPlotsFacet
+dev.off()
+
+pdf("../figures/FigureS1.pdf",
+    width = 11, height = 7.5)
 groundTruthPlotsFacet
 dev.off()
 ```
 
 For each differentially abundant phage, we want to know what percent of samples in the not breastfed versus breastfed category are positive for the presence of that taxon, within growth category.
 
-```{r percent-samples-positive-for-taxa}
+```{r percent-samples-positive-for-taxa, eval=FALSE}
 sigPhageAbdTable <- sigPhageNormalizedAbdDFModified %>% 
   dplyr::select(corrected_TaxaName, Sample, Growth_Status_Prior, bf_at_sampling, Abundance) %>% 
   mutate("Present" = ifelse(Abundance > 0, yes = TRUE, no = FALSE))
@@ -528,12 +733,11 @@ write.table(sigPhageSummaryTableFinal, "../analyses/sigPhageSummaryTableFinal.tx
             quote = FALSE, sep = "\t", row.names = FALSE)
 ```
 
-
 ## Extract Normalized Abundances for Significant Phage from DESeq Results
 
 For each significant phage detected by DESeq, extract the abundance values from psViralNormalizedMelt.
 
-```{r significantPhageAbundanceDF}
+```{r significantPhageAbundanceDF, eval=FALSE}
 significantPhageASVs <- pull(phageSigASVDFModified, "OTU")
 length(significantPhageASVs)
 significantPhageAbundanceDF <- filter(psViralNormalizedMelt,
