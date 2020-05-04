@@ -816,6 +816,12 @@ PlotGroundTruth <- function(df, plotTitle = NULL, pValPos = 0) {
 
 Format ground truth plots and arrange for eukaryotic panel figure.
 
+```{r for-ground-truth-labeling}
+timepointLabels <- c("Growth Period 1", "Growth Period 2")
+names(timepointLabels) <- c("initial", "midstudy")
+```
+
+
 ```{r adeno-ground-truth}
 #----- Adenoviridae Ground Truth -----#
 adenoNrmAbd <- eukFamilyNormalizedAbdDFList$Adenoviridae
@@ -829,7 +835,7 @@ adenoGroundTruth
 
 # "unpaired"
 adenoGroundTruthUnpaired <- adenoGroundTruth + 
-  facet_wrap(~ stage) +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
   theme(axis.title.y = element_blank()) +
   scale_y_log10(limits = c(1, 1e3))
 set.seed(79736632)
@@ -849,7 +855,7 @@ anelloGroundTruth
 
 # "unpaired"
 anelloGroundTruthUnpaired <- anelloGroundTruth + 
-  facet_wrap(~ stage) +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
   theme(axis.title.y = element_blank()) +
   scale_y_log10(limits = c(1, 1e3))
 set.seed(79736632)
@@ -868,7 +874,7 @@ enteroGroundTruth
 
 # "unpaired"
 enteroGroundTruthUnpaired <- enteroGroundTruth + 
-  facet_wrap(~ stage) +
+  facet_wrap(~ stage, labeller = labeller(stage = timepointLabels)) +
   theme(axis.title.y = element_blank())
 set.seed(79736632)
 enteroGroundTruthUnpaired
@@ -904,12 +910,12 @@ eukaryoticPanelUnpaired
 
 
 ```{r save-euk-panel, eval=FALSE}
-tiff("../figures/second_rebuttal_figures/Figure4_raw2.tiff",
+tiff("../figures/second_rebuttal_figures/Figure4_raw.tiff",
      units = "in", width = 8.5, height = 11, res = 300)
 eukaryoticPanelUnpaired
 dev.off()
 
-pdf("../figures/second_rebuttal_figures/Figure4_raw2.pdf",
+pdf("../figures/second_rebuttal_figures/Figure4_raw.pdf",
     width = 8.5, height = 11)
 eukaryoticPanelUnpaired
 dev.off()

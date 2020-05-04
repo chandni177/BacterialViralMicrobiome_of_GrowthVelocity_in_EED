@@ -592,15 +592,80 @@ allSigOTUs <- merge(allSigOTUs, taxTable, by = "OTU", all = FALSE)
 # row annotations (Genus Species)
 allSigOTUs <- allSigOTUs %>% 
   dplyr::mutate("Taxon" = paste(Genus, Species),
-                "Taxon" = str_remove_all(Taxon, "_"),
+                "Taxon" = str_replace_all(Taxon, "_", " "),
                 "Taxon" = ifelse(Taxon == "NA NA",
                                  yes = paste("unclassified", Family, sep = " "),
                                  no = Taxon))
 
-
-rowAnno <- allSigOTUs %>% 
+# Because there are some repeated Taxons (same genus species names) for distinct
+#   OTUs, need to add numeric identifiers.  These need to be propogated to the 
+#   Figure 3 heatmap, Figure S1 (correlation coefficient) heatmap, and DESeq2
+#   results.
+uniqueNamesSigOTUs <- allSigOTUs %>% 
   dplyr::select(OTU, Taxon) %>% 
-  column_to_rownames("OTU")
+  distinct()
+
+taxonNameCounts <- uniqueNamesSigOTUs %>% 
+  group_by(Taxon) %>% 
+  summarize(count = n()) %>% 
+  mutate("duplicated_taxon" = ifelse(count > 1, yes = TRUE, no = FALSE)) %>% 
+  dplyr::select(-count) %>% 
+  deframe()
+
+# Add duplicated_taxon info to allSigOTUs
+allSigOTUs <- allSigOTUs %>% 
+  mutate("duplicated_taxon" = taxonNameCounts[Taxon],
+         "taxon_number" = NA)
+
+# Add numbers
+dupeTaxonVec <- vector(mode = "character")
+
+for (i in 1:nrow(allSigOTUs)) {
+  
+  currentDuplicated <- allSigOTUs[i, "duplicated_taxon"]
+  
+  if (currentDuplicated == TRUE) {
+    currentTaxon <- allSigOTUs[i, "Taxon"]
+    dupeTaxonVec <- c(dupeTaxonVec, currentTaxon)
+    currentTaxonCount <- sum(dupeTaxonVec == currentTaxon)
+    allSigOTUs[i, "taxon_number"] <- currentTaxonCount
+  } else {
+    allSigOTUs[i, "taxon_number"] <- NA
+  }
+  
+}
+
+# Now add numbers to taxon for those that are repeated
+allSigOTUs <- allSigOTUs %>% 
+  mutate("unique_taxon" = ifelse(duplicated_taxon == TRUE,
+                                 yes = paste(Taxon, taxon_number, sep = " "),
+                                 no = Taxon))
+
+otuLUT <- allSigOTUs %>% 
+  dplyr::select(OTU, unique_taxon) %>%
+  deframe()
+
+otuLevels <- c("unclassified Ruminococcaceae",
+               "unclassified Lachnospiraceae",
+               "Oscillibacter NA",
+               "Clostridium sensu stricto NA 1", "Clostridium sensu stricto NA 2",
+               "Clostridium sensu stricto NA 3",
+               "Clostridium XlVa NA",
+               "Enterococcus NA 1", "Enterococcus NA 2",
+               "Megasphaera NA",
+               "Megamonas funiformis",
+               "Elusimicrobium NA",
+               "Olsenella NA",
+               "Bifidobacterium ruminantium",
+               "Alloprevotella NA 1", "Alloprevotella NA 2",
+               "Prevotella NA 1", "Prevotella NA 2", "Prevotella NA 3",
+               "Prevotella NA 4", "Prevotella NA 5", "Prevotella NA 6",
+               "Prevotella NA 7", "Prevotella NA 8", "Prevotella NA 9",
+               "Bacteroides dorei",
+               "Parabacteroides merdae",
+               "Providencia NA",
+               "Helicobacter fennelliae",
+               "Treponema succinifaciens")
 ```
 
 ```{r extract-normalized-abundance-values}
@@ -619,9 +684,10 @@ physeqBacteriaNormalized <- replace_counts(physeq = ps2.goodmoderatepoorgrowth.p
 
 bacteriaNormalizedMelt <- psmelt(physeqBacteriaNormalized)
 
-# filter for just the significant taxa
+# filter for just the significant taxa, add unique_taxon name from otuLUT
 bacteriaNormalizedMeltSigOTUs <- bacteriaNormalizedMelt %>% 
-  filter(OTU %in% allSigOTUs$OTU)
+  filter(OTU %in% allSigOTUs$OTU) %>% 
+  mutate(unique_taxon = otuLUT[OTU])
 
 # add pseudocount
 pseudoNorm <- bacteriaNormalizedMeltSigOTUs %>% 
@@ -629,41 +695,54 @@ pseudoNorm <- bacteriaNormalizedMeltSigOTUs %>%
 
 # average normalized OTU counts across growth categories
 avgSigOTUNormCounts <- pseudoNorm %>%
-  group_by(Growth_Status_Prior, OTU) %>% 
+  group_by(Growth_Status_Prior, unique_taxon) %>% 
   summarize(avg_norm_count = log2(mean(pseudo_norm)))
 
 # pivot wider to get correct matrix form for heatmap (rows as taxa, columns as 
 #   growth categories)
 heatmapNormDF <- avgSigOTUNormCounts %>% 
   pivot_wider(names_from = Growth_Status_Prior,
-              values_from = avg_norm_count) %>% 
-  column_to_rownames(var = "OTU")
+              values_from = avg_norm_count)
+
+heatmapNormDF$unique_taxon <- factor(heatmapNormDF$unique_taxon,
+                                     levels = otuLevels) 
+
+heatmapNormDF <- heatmapNormDF %>% 
+  arrange(unique_taxon) %>%
+  column_to_rownames(var = "unique_taxon")
 
 heatmapNormMtx <- as.matrix(heatmapNormDF)
 
-# Get row labels
-otuLUT <- rowAnno %>% 
-  rownames_to_column() %>% 
-  deframe()
-
-heatmapRowNames <- data.frame("OTU" = row.names(heatmapNormMtx)) %>% 
-  mutate("Taxon" = otuLUT[OTU])
-
-bacteriaHeatmap <- pheatmap(heatmapNormMtx, show_colnames = TRUE, 
-                            show_rownames = TRUE, annotation_row = rowAnno, 
+bacteriaHeatmap <- pheatmap(heatmapNormMtx, 
+                            show_colnames = TRUE, 
+                            show_rownames = TRUE,
                             cluster_cols = FALSE,
-                            cluster_rows = TRUE, 
-                            labels_row = heatmapRowNames$Taxon)
+                            cluster_rows = FALSE,
+                            cellwidth = 50)
 ```
 
 ```{r save-heatmap, eval=FALSE}
 pdf("../figures/second_rebuttal_figures/Figure3_raw.pdf",
-    width = 11, height = 8.5)
+    height = 6, width = 8)
 bacteriaHeatmap
 dev.off()
 ```
 
+```{r save-bacteriaNormalizedMeltSigOTUs}
+# save bacteria normalized melt for correlation heatmap
+saveRDS(bacteriaNormalizedMeltSigOTUs,
+        "../data/RDataObjects/bacteriaNormalizedMeltSigOTUs.RDS")
+
+# save otuLevels
+saveRDS(otuLevels,
+        "../data/RDataObjects/otuLevels.RDS")
+```
+
 ```{r save-deseq-results-tables, eval=FALSE}
+# add unique_taxon to the deseqSigTables
+deseqSigTables <- map(.x = deseqSigTables,
+                      .f = ~ .x %>% mutate("unique_taxon" = otuLUT[OTU]))
+
 renamedSigTables <- deseqSigTables
 names(renamedSigTables) <- c("bacterial_Adequate-Poor",
                              "bacterial_Adequate-Moderate",

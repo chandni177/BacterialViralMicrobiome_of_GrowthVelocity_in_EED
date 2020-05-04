@@ -28,8 +28,6 @@ library("FSA")
 library("gmodels")
 library("tidyverse")
 
-source("./shared_R_scripts/Helper_Functions.R")
-
 theme_set(theme_bw(base_size = 14))
 
 # Load Viral Pre-processing Data
@@ -37,6 +35,8 @@ theme_set(theme_bw(base_size = 14))
 load("../data/RDataObjects/EE_Virome_Preprocessing.RData")
 physeqVirusFinal # 3035 x 145 (contains all taxa and healthy + EE samples)
 physeqSubsetFinal # 1021 x 145 (contains selected phage and healthy + EE samples)
+
+source("./shared_R_scripts/Helper_Functions.R")
 ```
 
 ## Sample Selection - Growth_Status_Prior, Moderate & Severe EE
@@ -142,14 +142,31 @@ CalculateAlphaDiversity <- function(physeqObj) {
 ```{r alphaDivDFList}
 phageAlphaDiv <- CalculateAlphaDiversity(physeqPriorAllEEPhage)
 
-#write.table(phageAlphaDiv, "../analyses/phageRichnessAndDiversity_191209.txt",
+#write.table(phageAlphaDiv, "../analyses/phageRichnessAndDiversity.txt",
             #row.names = FALSE, quote = FALSE, sep = "\t")
 
+# add delta HAZ values for regression models
+analyzedSamplesWithDeltas <- read.delim("../documents/analyzedSamplesWithDeltas.txt")
+deltaHAZValues <- dplyr::select(analyzedSamplesWithDeltas,
+                                Manary_Barcode, delta_HAZ)
+
+phageAlphaDiv <- merge(phageAlphaDiv, deltaHAZValues,
+                       by.x = "unique_id", by.y = "Manary_Barcode",
+                       all = FALSE)
 ```
 
 ```{r phagel-richness-regression}
 phageRichRegression <- lm(Observed ~ age_months, data = phageAlphaDiv)
 summary(phageRichRegression)
+
+# model with additional parameters
+richRegContHAZ <- lm(Observed ~ delta_HAZ + HAZ + age_months + gender + bf_at_sampling + (1|patient_ID), 
+                     data = phageAlphaDiv)
+summary(richRegContHAZ)
+
+divRegContHAZ <- lm(Shannon ~ delta_HAZ + HAZ + age_months + gender + bf_at_sampling + (1|patient_ID), 
+                     data = phageAlphaDiv)
+summary(divRegContHAZ)
 ```
 
 ```{r phageRichRegressionPlot}
@@ -456,7 +473,7 @@ taxTable <- data.frame(as(tax_table(physeqPhageFilt), "matrix")) %>%
 allSigOTUs <- merge(allSigOTUs, taxTable, by = "OTU", all = FALSE)
 ```
 
-```{r annotations-for-heatmap, eval=FALSE}
+```{r annotations-for-heatmap}
 # row annotations (rank 1 and 3)
 allSigOTUs <- allSigOTUs %>% 
   dplyr::mutate("Taxon" = paste(Rank1, Rank3))
@@ -518,8 +535,8 @@ phageHeatmap <- pheatmap(heatmapNormMtx, show_colnames = TRUE,
                          cluster_cols = FALSE,
                          cluster_rows = TRUE,
                          labels_row = heatmapRowNames$Taxon,
-                         cellwidth = 100,
-                         cellheight = 100)
+                         cellwidth = 50,
+                         cellheight = 50)
 ```
 
 ```{r save-deseq-results-tables, eval=FALSE}
@@ -533,10 +550,16 @@ write_xlsx(renamedSigTables,
 
 ```{r save-heatmap, eval=FALSE}
 pdf("../figures/second_rebuttal_figures/Figure6_raw.pdf",
-    width = 11, height = 6)
+    width = 8.5, height = 6)
 phageHeatmap
 dev.off()
 ```
+
+```{r save-phageNormalizedMelthSigOTUs-for-correlation-heatmaps, eval=FALSE}
+saveRDS(phageNormalizedMeltSigOTUs,
+        "../data/RDataObjects/phageNormalizedMeltSigOTUs.RDS")
+```
+
 
 # Removed (Related to Old DESeq Analyses)
 
