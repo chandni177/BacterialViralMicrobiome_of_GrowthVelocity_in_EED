@@ -160,11 +160,11 @@ phageRichRegression <- lm(Observed ~ age_months, data = phageAlphaDiv)
 summary(phageRichRegression)
 
 # model with additional parameters
-richRegContHAZ <- lm(Observed ~ delta_HAZ + HAZ + age_months + gender + bf_at_sampling + (1|patient_ID), 
+richRegContHAZ <- lm(delta_HAZ ~ Observed + HAZ + age_months + gender + bf_at_sampling + (1|patient_ID), 
                      data = phageAlphaDiv)
 summary(richRegContHAZ)
 
-divRegContHAZ <- lm(Shannon ~ delta_HAZ + HAZ + age_months + gender + bf_at_sampling + (1|patient_ID), 
+divRegContHAZ <- lm(delta_HAZ ~ Shannon + HAZ + age_months + gender + bf_at_sampling + (1|patient_ID), 
                      data = phageAlphaDiv)
 summary(divRegContHAZ)
 ```
