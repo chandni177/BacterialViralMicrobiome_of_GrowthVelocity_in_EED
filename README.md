@@ -21,4 +21,4 @@ Virome Analysis
 Additional Code
 1. EE_Calculate_Delta_HAZ.R: Script to calculate delta HAZ values for analyzed samples.  
 2. EE_Table1_Data.R:  Script to generate values for Table 1.
-3. EE_Correlation_Heatmaps.Rmd: Script to generate significant phage-bacteria normalized abundances correlation heatmap (Figure S2).
+3. EE_Correlation_Heatmaps.Rmd: Script to generate significant phage-bacteria normalized abundances correlation heatmap (Figure S1).
